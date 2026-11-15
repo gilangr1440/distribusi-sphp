@@ -492,6 +492,33 @@
         </div>
 
         <form id="transaction-form" onsubmit="handleSaveTransaction(event)" class="space-y-4">
+          <!-- Tanggal Transaksi (Custom Date) -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="input-tanggal" class="block text-sm font-semibold text-slate-800">
+                Tanggal Transaksi
+              </label>
+              <button
+                id="btn-date-today"
+                type="button"
+                onclick="resetTransactionDateToToday()"
+                class="text-xs font-semibold text-[#C8102E] hover:text-[#A00C24] transition-colors"
+              >
+                Hari Ini
+              </button>
+            </div>
+            <input
+              id="input-tanggal"
+              type="date"
+              onchange="handleTransactionDateChange()"
+              required
+              class="w-full min-h-[46px] px-3.5 text-sm font-mono font-medium bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E] transition-colors tabular-nums"
+            />
+            <p id="date-status-hint" class="text-xs text-slate-500 mt-1 tabular-nums">
+              Menggunakan tanggal hari ini
+            </p>
+          </div>
+
           <!-- No. KK + Scan KK -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
@@ -1074,6 +1101,12 @@
       lucide.createIcons();
       document.getElementById("period-select").value = appState.selectedPeriod;
 
+      // Set default period & tanggal transaksi hari ini
+      const todayStr = getTodayDateString();
+      const txDateInput = document.getElementById("input-tanggal");
+      if (txDateInput) txDateInput.value = todayStr;
+      updateDateStatusLabel();
+
       // Cek apakah ada sesi login KDKMP yang tersimpan di localStorage
       const savedSession = loadSessionFromStorage();
       const urlParams = new URLSearchParams(window.location.search);
@@ -1093,6 +1126,11 @@
         showAuthView(urlKdkmp);
       }
     });
+
+    function getTodayDateString() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    }
 
     function getCurrentYearMonth() {
       const now = new Date();
@@ -1223,17 +1261,30 @@
         0,
         parseInt(pickField(raw, ["Jumlah_Beli", "Jumlah", "Qty", "Pcs"]) ?? 0, 10) || 0
       );
-      const timestampRaw = String(
+      const rawTanggalTx = String(
+        pickField(raw, ["Tanggal_Transaksi", "Tgl_Transaksi"]) ?? ""
+      ).trim();
+      const rawTimestamp = String(
         pickField(raw, ["Timestamp", "Tanggal", "Waktu", "Created_At"]) ?? ""
       ).trim();
+
+      // Gunakan Tanggal_Transaksi jika tersedia, jika tidak gunakan Timestamp
+      let displayTimestamp = rawTimestamp;
+      if (/^\d{4}-\d{2}-\d{2}/.test(rawTanggalTx)) {
+        displayTimestamp = rawTanggalTx.slice(0, 10);
+      }
 
       let bulanPeriode = String(
         pickField(raw, ["Bulan_Periode", "Periode", "Bulan"]) ?? ""
       ).trim();
-      if (!/^\d{4}-\d{2}$/.test(bulanPeriode) && timestampRaw) {
-        const parsedDate = new Date(timestampRaw);
-        if (!isNaN(parsedDate.getTime())) {
-          bulanPeriode = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`;
+      if (!/^\d{4}-\d{2}$/.test(bulanPeriode) && displayTimestamp) {
+        if (/^\d{4}-\d{2}/.test(displayTimestamp)) {
+          bulanPeriode = displayTimestamp.slice(0, 7);
+        } else {
+          const parsedDate = new Date(displayTimestamp);
+          if (!isNaN(parsedDate.getTime())) {
+            bulanPeriode = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`;
+          }
         }
       }
       if (!bulanPeriode) bulanPeriode = appState.selectedPeriod;
@@ -1241,8 +1292,8 @@
       return {
         id: pickField(raw, ["ID", "Id", "Row"]) ?? null,
         row: pickField(raw, ["Row", "RowIndex"]) ?? null,
-        clientKey: `${timestampRaw}_${noKK}_${index}`,
-        timestamp: timestampRaw,
+        clientKey: `${displayTimestamp}_${noKK}_${index}`,
+        timestamp: displayTimestamp,
         bulanPeriode,
         kodeKdkmp: String(pickField(raw, ["Kode_KDKMP", "KDKMP"]) ?? "").trim(),
         noKK,
@@ -1300,6 +1351,11 @@
         `Kuota Maks: ${info.Kuota_Max_Bulan} pcs (${info.Kuota_Max_Bulan * 5} kg) / KK / Bulan`;
       document.getElementById("unit-title-heading").textContent = info.Nama_KDKMP;
 
+      const dateInput = document.getElementById("input-tanggal");
+      if (dateInput && !dateInput.value) {
+        dateInput.value = getTodayDateString();
+      }
+      updateDateStatusLabel();
       renderQuickQtyButtons();
       resetQuotaStatusUI();
       lucide.createIcons();
@@ -1917,10 +1973,64 @@
       input.focus();
     }
 
+    function updateDateStatusLabel() {
+      const dateInput = document.getElementById("input-tanggal");
+      const hint = document.getElementById("date-status-hint");
+      const btnToday = document.getElementById("btn-date-today");
+      if (!dateInput || !hint) return;
+
+      const val = dateInput.value || getTodayDateString();
+      const today = getTodayDateString();
+      const period = val.slice(0, 7);
+
+      if (val === today) {
+        hint.className = "text-xs text-slate-500 mt-1 tabular-nums";
+        hint.textContent = `Menggunakan tanggal hari ini · Periode ${period}`;
+        if (btnToday) btnToday.classList.add("opacity-40", "pointer-events-none");
+      } else {
+        hint.className = "text-xs font-medium text-amber-700 mt-1 tabular-nums";
+        hint.textContent = `Tanggal kustom dipilih (${formatDateOnly(val)}) · Periode ${period}`;
+        if (btnToday) btnToday.classList.remove("opacity-40", "pointer-events-none");
+      }
+    }
+
+    function resetTransactionDateToToday() {
+      const dateInput = document.getElementById("input-tanggal");
+      if (!dateInput) return;
+      dateInput.value = getTodayDateString();
+      handleTransactionDateChange();
+    }
+
+    function handleTransactionDateChange() {
+      const dateInput = document.getElementById("input-tanggal");
+      if (!dateInput || !dateInput.value) return;
+      const newPeriod = dateInput.value.slice(0, 7);
+      updateDateStatusLabel();
+
+      if (/^\d{4}-\d{2}$/.test(newPeriod) && newPeriod !== appState.selectedPeriod) {
+        appState.selectedPeriod = newPeriod;
+        document.getElementById("period-select").value = newPeriod;
+        renderSummaryAndData();
+
+        const noKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
+        if (noKK.length === 16) {
+          checkGlobalQuota(noKK);
+        }
+      }
+    }
+
     function handlePeriodChange() {
       const val = document.getElementById("period-select").value;
       if (!val) return;
       appState.selectedPeriod = val;
+
+      // Sinkronkan tanggal transaksi agar masuk dalam periode bulan yang dipilih
+      const dateInput = document.getElementById("input-tanggal");
+      if (dateInput && (!dateInput.value || !dateInput.value.startsWith(val))) {
+        dateInput.value = val === getCurrentYearMonth() ? getTodayDateString() : `${val}-01`;
+        updateDateStatusLabel();
+      }
+
       renderSummaryAndData();
 
       const noKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
@@ -2216,10 +2326,20 @@
         return;
       }
 
+      const txDate = document.getElementById("input-tanggal").value || getTodayDateString();
+      const txPeriod = txDate.slice(0, 7);
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const ss = String(now.getSeconds()).padStart(2, "0");
+      const customTimestamp = `${txDate}T${hh}:${mm}:${ss}`;
+
       const payload = {
         Kode_KDKMP: appState.session.Kode_KDKMP,
         PIN_KDKMP: appState.session.PIN_KDKMP,
-        Bulan_Periode: appState.selectedPeriod,
+        Bulan_Periode: txPeriod,
+        Tanggal_Transaksi: txDate,
+        Timestamp: customTimestamp,
         Kuota_Max: appState.session.kdkmp_info?.Kuota_Max_Bulan || 5,
         No_KK: noKK,
         Nama_Kepala_Keluarga: nama,
@@ -2248,9 +2368,11 @@
         }
 
         document.getElementById("transaction-form").reset();
+        document.getElementById("input-tanggal").value = txDate;
+        updateDateStatusLabel();
         document.getElementById("input-jumlah").value = "1";
         resetQuotaStatusUI(0);
-        showToast(`Tersimpan: ${nama} (${jumlah} pcs / ${jumlah * 5} kg)`, "success");
+        showToast(`Tersimpan (${formatDateOnly(txDate)}): ${nama} (${jumlah} pcs / ${jumlah * 5} kg)`, "success");
 
         await fetchAuthenticatedTransactions(false);
       } catch (err) {
@@ -3016,10 +3138,24 @@
       }, 3500);
     }
 
+    function formatDateOnly(ymd) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(ymd || ""))) return String(ymd || "-");
+      const [y, m, d] = ymd.split("-").map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+    }
+
     function formatShortDate(isoOrRaw) {
       if (!isoOrRaw) return "-";
-      const d = new Date(isoOrRaw);
-      if (isNaN(d.getTime())) return String(isoOrRaw);
+      const str = String(isoOrRaw).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        return formatDateOnly(str);
+      }
+      const d = new Date(str);
+      if (isNaN(d.getTime())) return str;
       return d.toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "short",
