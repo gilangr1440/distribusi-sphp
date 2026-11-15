@@ -45,6 +45,9 @@
   <!-- Tesseract.js v5 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
+  <!-- SheetJS (XLSX) CDN for Export Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
   <style>
     body {
       font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -70,7 +73,7 @@
 <body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
 
   <!-- Toast Notification Container -->
-  <div id="toast-container" class="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-96 z-50 flex flex-col gap-2 pointer-events-none"></div>
+  <div id="toast-container" class="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-96 z-[70] flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- ========================================================= -->
   <!-- TOP STICKY HEADER                                         -->
@@ -452,13 +455,13 @@
         </button>
 
         <button
-          id="btn-export-csv"
+          id="btn-export-excel"
           type="button"
-          onclick="exportCSV()"
+          onclick="exportExcel()"
           class="inline-flex items-center gap-1.5 px-3.5 min-h-[44px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]"
         >
-          <i data-lucide="download" class="w-4 h-4"></i>
-          <span>Export CSV</span>
+          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-700"></i>
+          <span>Export Excel</span>
         </button>
       </div>
     </section>
@@ -492,11 +495,11 @@
         </div>
 
         <form id="transaction-form" onsubmit="handleSaveTransaction(event)" class="space-y-4">
-          <!-- Tanggal Transaksi (Custom Date) -->
+          <!-- Tanggal Pembelian (Custom Date) -->
           <div>
             <div class="flex items-center justify-between mb-1.5">
               <label for="input-tanggal" class="block text-sm font-semibold text-slate-800">
-                Tanggal Transaksi
+                Tanggal Pembelian
               </label>
               <button
                 id="btn-date-today"
@@ -980,6 +983,7 @@
             <p id="delete-confirm-detail" class="text-xs text-slate-600 mt-1">Data transaksi akan dihapus permanen dari Google Sheets unit ini.</p>
           </div>
         </div>
+        <div id="delete-error-box" class="hidden rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-800"></div>
         <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2">
           <button
             type="button"
@@ -1081,6 +1085,7 @@
       quotaState: {
         checked: false,
         noKK: "",
+        checkedPeriod: "",
         maxKuota: 5,
         terpakaiGlobal: 0,
         sisaGlobal: 5,
@@ -1135,6 +1140,17 @@
     function getCurrentYearMonth() {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function getActiveTanggalPembelian() {
+      const el = document.getElementById("input-tanggal");
+      const val = (el?.value || "").trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(val) ? val : getTodayDateString();
+    }
+
+    function getActiveQuotaPeriod() {
+      const ymd = getActiveTanggalPembelian();
+      return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd.slice(0, 7) : appState.selectedPeriod;
     }
 
     function loadSessionFromStorage() {
@@ -1246,12 +1262,28 @@
       };
     }
 
+    function extractYmdDate(rawVal) {
+      const str = String(rawVal ?? "").trim();
+      if (!str) return "";
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        return str.slice(0, 10);
+      }
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+      }
+      return "";
+    }
+
     function normalizeTransaction(raw, index = 0) {
       if (!raw || typeof raw !== "object") return null;
       const noKK = String(pickField(raw, ["No_KK", "NoKK", "Nomor_KK", "KK"]) ?? "")
         .replace(/\D/g, "")
         .trim();
       if (!noKK) return null;
+
+      const rawNoKKField = pickField(raw, ["No_KK", "NoKK", "Nomor_KK", "KK"]);
+      const rawNoKK = rawNoKKField !== undefined && rawNoKKField !== null ? String(rawNoKKField).trim() : noKK;
 
       const nama = String(
         pickField(raw, ["Nama_Kepala_Keluarga", "Nama_KK", "Nama_Pembeli", "Nama"]) ?? ""
@@ -1261,45 +1293,83 @@
         0,
         parseInt(pickField(raw, ["Jumlah_Beli", "Jumlah", "Qty", "Pcs"]) ?? 0, 10) || 0
       );
-      const rawTanggalTx = String(
-        pickField(raw, ["Tanggal_Transaksi", "Tgl_Transaksi"]) ?? ""
+      const rawTanggalPembelian = String(
+        pickField(raw, ["Tanggal_Pembelian", "Tgl_Pembelian", "Tanggal_Transaksi", "Tgl_Transaksi"]) ?? ""
       ).trim();
-      const rawTimestamp = String(
-        pickField(raw, ["Timestamp", "Tanggal", "Waktu", "Created_At"]) ?? ""
-      ).trim();
+      const rawTimestampField = pickField(raw, [
+        "Timestamp",
+        "Tanggal",
+        "Waktu",
+        "Created_At",
+        "Tanggal_Waktu",
+        "Waktu_Transaksi",
+        "TS",
+      ]);
+      const rawTimestamp = rawTimestampField !== undefined && rawTimestampField !== null ? String(rawTimestampField).trim() : "";
 
-      // Gunakan Tanggal_Transaksi jika tersedia, jika tidak gunakan Timestamp
-      let displayTimestamp = rawTimestamp;
-      if (/^\d{4}-\d{2}-\d{2}/.test(rawTanggalTx)) {
-        displayTimestamp = rawTanggalTx.slice(0, 10);
-      }
+      const tanggalPembelian = extractYmdDate(rawTanggalPembelian) || extractYmdDate(rawTimestamp) || "";
+      const displayTimestamp = rawTimestamp || tanggalPembelian;
 
       let bulanPeriode = String(
         pickField(raw, ["Bulan_Periode", "Periode", "Bulan"]) ?? ""
       ).trim();
-      if (!/^\d{4}-\d{2}$/.test(bulanPeriode) && displayTimestamp) {
-        if (/^\d{4}-\d{2}/.test(displayTimestamp)) {
-          bulanPeriode = displayTimestamp.slice(0, 7);
-        } else {
-          const parsedDate = new Date(displayTimestamp);
-          if (!isNaN(parsedDate.getTime())) {
-            bulanPeriode = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`;
+      if (!/^\d{4}-\d{2}$/.test(bulanPeriode)) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(tanggalPembelian)) {
+          bulanPeriode = tanggalPembelian.slice(0, 7);
+        } else if (displayTimestamp) {
+          if (/^\d{4}-\d{2}/.test(displayTimestamp)) {
+            bulanPeriode = displayTimestamp.slice(0, 7);
+          } else {
+            const parsedDate = new Date(displayTimestamp);
+            if (!isNaN(parsedDate.getTime())) {
+              bulanPeriode = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`;
+            }
           }
         }
       }
       if (!bulanPeriode) bulanPeriode = appState.selectedPeriod;
 
+      const resolvedId = pickField(raw, [
+        "ID",
+        "Id",
+        "ID_Transaksi",
+        "Id_Transaksi",
+        "Tx_ID",
+        "Transaction_ID",
+        "UUID",
+        "Row_ID",
+        "UID",
+      ]);
+      const resolvedRow = pickField(raw, [
+        "Row",
+        "RowIndex",
+        "Row_Index",
+        "RowNumber",
+        "Row_Number",
+        "SheetRow",
+        "Sheet_Row",
+        "Baris",
+        "No_Baris",
+        "RowNum",
+        "Line",
+        "Index",
+      ]);
+
       return {
-        id: pickField(raw, ["ID", "Id", "Row"]) ?? null,
-        row: pickField(raw, ["Row", "RowIndex"]) ?? null,
-        clientKey: `${displayTimestamp}_${noKK}_${index}`,
+        id: resolvedId !== undefined && resolvedId !== null && String(resolvedId).trim() !== "" ? resolvedId : null,
+        row: resolvedRow !== undefined && resolvedRow !== null && String(resolvedRow).trim() !== "" ? resolvedRow : null,
+        clientKey: `tx_${index}_${noKK}`,
+        tanggalPembelian,
+        rawTimestamp,
         timestamp: displayTimestamp,
         bulanPeriode,
         kodeKdkmp: String(pickField(raw, ["Kode_KDKMP", "KDKMP"]) ?? "").trim(),
+        rawNoKK,
         noKK,
         nama: nama || "Tanpa Nama",
         rtRw: rtRw || "-",
         jumlah,
+        rawRecord: raw,
       };
     }
 
@@ -2007,13 +2077,16 @@
       const newPeriod = dateInput.value.slice(0, 7);
       updateDateStatusLabel();
 
-      if (/^\d{4}-\d{2}$/.test(newPeriod) && newPeriod !== appState.selectedPeriod) {
-        appState.selectedPeriod = newPeriod;
-        document.getElementById("period-select").value = newPeriod;
-        renderSummaryAndData();
+      if (/^\d{4}-\d{2}$/.test(newPeriod)) {
+        const periodChanged = newPeriod !== appState.selectedPeriod;
+        if (periodChanged) {
+          appState.selectedPeriod = newPeriod;
+          document.getElementById("period-select").value = newPeriod;
+          renderSummaryAndData();
+        }
 
         const noKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
-        if (noKK.length === 16) {
+        if (noKK.length === 16 && (periodChanged || appState.quotaState.checkedPeriod !== newPeriod)) {
           checkGlobalQuota(noKK);
         }
       }
@@ -2024,7 +2097,7 @@
       if (!val) return;
       appState.selectedPeriod = val;
 
-      // Sinkronkan tanggal transaksi agar masuk dalam periode bulan yang dipilih
+      // Sinkronkan tanggal pembelian agar masuk dalam periode bulan yang dipilih
       const dateInput = document.getElementById("input-tanggal");
       if (dateInput && (!dateInput.value || !dateInput.value.startsWith(val))) {
         dateInput.value = val === getCurrentYearMonth() ? getTodayDateString() : `${val}-01`;
@@ -2065,6 +2138,7 @@
       appState.quotaState = {
         checked: false,
         noKK: "",
+        checkedPeriod: "",
         maxKuota,
         terpakaiGlobal: 0,
         sisaGlobal: maxKuota,
@@ -2101,6 +2175,7 @@
     async function checkGlobalQuota(noKK) {
       if (!noKK || noKK.length !== 16) return;
 
+      const targetPeriod = getActiveQuotaPeriod();
       const box = document.getElementById("quota-status-box");
       const icon = document.getElementById("quota-status-icon");
       const title = document.getElementById("quota-status-title");
@@ -2117,22 +2192,22 @@
       title.className = "text-xs font-semibold text-slate-800";
       title.textContent = "Memeriksa kuota lintas KDKMP...";
       desc.className = "text-xs text-slate-500 mt-0.5";
-      desc.textContent = `Mengecek total pembelian KK ini untuk periode ${appState.selectedPeriod}.`;
+      desc.textContent = `Mengecek total pembelian KK ini untuk periode ${targetPeriod}.`;
       lucide.createIcons();
 
       try {
         const endpoint = buildGetUrl({
           action: "check_quota",
           nokk: noKK,
-          bulan: appState.selectedPeriod,
+          bulan: targetPeriod,
         });
         const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json = await res.json();
 
-        // Pastikan input No. KK tidak berubah selama request berlangsung
+        // Pastikan input No. KK dan bulan Tanggal Pembelian tidak berubah selama request berlangsung
         const currentInputKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
-        if (currentInputKK !== noKK) return;
+        if (currentInputKK !== noKK || getActiveQuotaPeriod() !== targetPeriod) return;
 
         if (json.status === "error" || json.success === false) {
           throw new Error(json.message || "Gagal memeriksa kuota di server");
@@ -2171,6 +2246,7 @@
         appState.quotaState = {
           checked: true,
           noKK,
+          checkedPeriod: targetPeriod,
           maxKuota,
           terpakaiGlobal,
           sisaGlobal,
@@ -2183,7 +2259,7 @@
           icon.setAttribute("data-lucide", "x-circle");
           icon.className = "w-4 h-4 text-red-600 shrink-0 mt-0.5";
           title.className = "text-xs font-bold text-red-800";
-          title.textContent = "Kuota Bulan Ini Habis (Diblokir)";
+          title.textContent = `Kuota Periode ${targetPeriod} Habis (Diblokir)`;
           desc.className = "text-xs text-red-700 mt-0.5 tabular-nums";
           desc.textContent = `Total pembelian lintas KDKMP sudah ${terpakaiGlobal} dari batas maksimal ${maxKuota} pcs (${maxKuota * 5} kg).`;
           submitBtn.disabled = true;
@@ -2195,7 +2271,7 @@
           title.className = "text-xs font-bold text-amber-900";
           title.textContent = `Kuota Tersisa Sebagian (${sisaGlobal} pcs lagi)`;
           desc.className = "text-xs text-amber-800 mt-0.5 tabular-nums";
-          desc.textContent = `Sudah tercatat ${terpakaiGlobal} dari ${maxKuota} pcs bulan ini · Maksimal beli sekarang ${sisaGlobal} pcs (${sisaGlobal * 5} kg).`;
+          desc.textContent = `Sudah tercatat ${terpakaiGlobal} dari ${maxKuota} pcs pada periode ${targetPeriod} · Maksimal beli sekarang ${sisaGlobal} pcs (${sisaGlobal * 5} kg).`;
           submitBtn.disabled = appState.isSubmitting;
         } else {
           // HIJAU: Kuota Penuh Tersedia
@@ -2205,7 +2281,7 @@
           title.className = "text-xs font-bold text-emerald-900";
           title.textContent = `Kuota Penuh Tersedia (${sisaGlobal} pcs)`;
           desc.className = "text-xs text-emerald-800 mt-0.5 tabular-nums";
-          desc.textContent = `Belum ada pembelian di seluruh KDKMP pada periode ${appState.selectedPeriod} · Maksimal ${maxKuota} pcs (${maxKuota * 5} kg).`;
+          desc.textContent = `Belum ada pembelian di seluruh KDKMP pada periode ${targetPeriod} · Maksimal ${maxKuota} pcs (${maxKuota * 5} kg).`;
           submitBtn.disabled = appState.isSubmitting;
         }
 
@@ -2218,6 +2294,7 @@
         appState.quotaState = {
           checked: false,
           noKK,
+          checkedPeriod: "",
           maxKuota: appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5,
           terpakaiGlobal: 0,
           sisaGlobal: 0,
@@ -2317,17 +2394,25 @@
       const rtRw = document.getElementById("input-rtrw").value.trim();
       const jumlah = parseInt(document.getElementById("input-jumlah").value, 10) || 0;
 
+      const txDate = getActiveTanggalPembelian();
+      const txPeriod = txDate.slice(0, 7);
+
       if (noKK.length !== 16 || !appState.quotaState.checked || appState.quotaState.noKK !== noKK) {
         showToast("Pastikan 16 digit No. KK sudah dicek kuotanya", "error");
         return;
+      }
+      if (appState.quotaState.checkedPeriod !== txPeriod) {
+        await checkGlobalQuota(noKK);
+        if (!appState.quotaState.checked || appState.quotaState.checkedPeriod !== txPeriod) {
+          showToast(`Gagal memverifikasi kuota untuk periode ${txPeriod}`, "error");
+          return;
+        }
       }
       if (jumlah < 1 || jumlah > appState.quotaState.sisaGlobal) {
         showToast(`Jumlah beli melebihi sisa kuota (${appState.quotaState.sisaGlobal} pcs)`, "error");
         return;
       }
 
-      const txDate = document.getElementById("input-tanggal").value || getTodayDateString();
-      const txPeriod = txDate.slice(0, 7);
       const now = new Date();
       const hh = String(now.getHours()).padStart(2, "0");
       const mm = String(now.getMinutes()).padStart(2, "0");
@@ -2338,6 +2423,7 @@
         Kode_KDKMP: appState.session.Kode_KDKMP,
         PIN_KDKMP: appState.session.PIN_KDKMP,
         Bulan_Periode: txPeriod,
+        Tanggal_Pembelian: txDate,
         Tanggal_Transaksi: txDate,
         Timestamp: customTimestamp,
         Kuota_Max: appState.session.kdkmp_info?.Kuota_Max_Bulan || 5,
@@ -2397,15 +2483,35 @@
 
     function openDeleteModal(clientKey) {
       const tx = appState.transactions.find((t) => t.clientKey === clientKey);
-      if (!tx) return;
+      if (!tx) {
+        showToast("Data transaksi tidak ditemukan di daftar lokal. Silakan sinkronkan ulang.", "error");
+        return;
+      }
       appState.pendingDeleteTx = tx;
+      const errBox = document.getElementById("delete-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
+      const btn = document.getElementById("btn-confirm-delete");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Ya, Hapus Transaksi";
+      }
+      const tglLabel = formatDateOnly(tx.tanggalPembelian || tx.timestamp);
       document.getElementById("delete-confirm-detail").textContent =
-        `Hapus transaksi milik ${tx.nama} (${tx.noKK}) sebanyak ${tx.jumlah} pcs (${tx.jumlah * 5} kg) pada periode ${tx.bulanPeriode}?`;
+        `Hapus transaksi milik ${tx.nama} (${tx.noKK}) pada ${tglLabel} sebanyak ${tx.jumlah} pcs (${tx.jumlah * 5} kg)?`;
       document.getElementById("modal-delete-confirm").classList.remove("hidden");
+      lucide.createIcons();
     }
 
     function closeDeleteModal() {
       appState.pendingDeleteTx = null;
+      const errBox = document.getElementById("delete-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
       document.getElementById("modal-delete-confirm").classList.add("hidden");
     }
 
@@ -2414,21 +2520,50 @@
       if (!tx || !appState.session) return;
 
       const btn = document.getElementById("btn-confirm-delete");
+      const errBox = document.getElementById("delete-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
       btn.disabled = true;
       btn.textContent = "Menghapus...";
 
       try {
+        const tsValue = tx.rawTimestamp || tx.timestamp || "";
         const payload = {
           action: "delete",
-          Kode_KDKMP: appState.session.Kode_KDKMP,
+          Kode_KDKMP: tx.kodeKdkmp || appState.session.Kode_KDKMP,
           PIN_KDKMP: appState.session.PIN_KDKMP,
-          id: tx.id,
-          row: tx.row,
-          Timestamp: tx.timestamp,
+          Timestamp: tsValue,
+          timestamp: tsValue,
+          Tanggal_Pembelian: tx.tanggalPembelian || "",
+          Tanggal_Transaksi: tx.tanggalPembelian || "",
           Bulan_Periode: tx.bulanPeriode,
-          No_KK: tx.noKK,
+          No_KK: tx.rawNoKK || tx.noKK,
           Jumlah_Beli: tx.jumlah,
         };
+
+        const hasValidId = tx.id !== null && tx.id !== undefined && String(tx.id).trim() !== "";
+        const hasValidRow = tx.row !== null && tx.row !== undefined && String(tx.row).trim() !== "";
+
+        if (hasValidRow) {
+          const numericRow = Number(tx.row);
+          const safeRow = !isNaN(numericRow) && numericRow > 0 ? numericRow : tx.row;
+          payload.row = safeRow;
+          payload.Row = safeRow;
+          payload.rowIndex = safeRow;
+          payload.RowIndex = safeRow;
+          if (!hasValidId) {
+            payload.id = safeRow;
+            payload.ID = safeRow;
+          }
+        }
+        if (hasValidId) {
+          payload.ID_Transaksi = tx.id;
+          payload.id_transaksi = tx.id;
+          payload.id = tx.id;
+          payload.ID = tx.id;
+        }
 
         const res = await fetch(appState.apiUrl, {
           method: "POST",
@@ -2437,17 +2572,42 @@
           redirect: "follow",
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
 
-        if (json.status === "error" || json.success === false) {
-          throw new Error(json.message || "Gagal menghapus transaksi");
+        const rawText = await res.text();
+        let json = null;
+        if (rawText && rawText.trim()) {
+          try {
+            json = JSON.parse(rawText);
+          } catch (parseErr) {
+            if (rawText.trim().startsWith("<")) {
+              throw new Error("Respons server tidak valid (HTML). Periksa deployment Google Apps Script.");
+            }
+            if (/error|gagal|ditolak|salah|tidak ditemukan/i.test(rawText)) {
+              throw new Error(rawText.trim().slice(0, 160));
+            }
+          }
         }
 
+        if (json && (json.status === "error" || json.success === false)) {
+          throw new Error(json.message || "Gagal menghapus transaksi di server");
+        }
+
+        const deletedNoKK = tx.noKK;
         closeDeleteModal();
         showToast("Transaksi berhasil dihapus", "success");
         await fetchAuthenticatedTransactions(false);
+
+        const activeInputKK = (document.getElementById("input-no-kk")?.value || "").replace(/\D/g, "");
+        if (activeInputKK.length === 16 && activeInputKK === deletedNoKK) {
+          checkGlobalQuota(activeInputKK);
+        }
       } catch (err) {
-        showToast(`Gagal menghapus: ${err.message}`, "error");
+        const msg = err?.message || "Terjadi kesalahan saat menghapus transaksi";
+        if (errBox) {
+          errBox.textContent = `Gagal menghapus: ${msg}`;
+          errBox.classList.remove("hidden");
+        }
+        showToast(`Gagal menghapus: ${msg}`, "error");
       } finally {
         btn.disabled = false;
         btn.textContent = "Ya, Hapus Transaksi";
@@ -2559,7 +2719,14 @@
               tx.rtRw.toLowerCase().includes(query)
             );
           })
-          .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+          .sort((a, b) => {
+            const dateA = a.tanggalPembelian || "";
+            const dateB = b.tanggalPembelian || "";
+            if (dateA !== dateB) return dateB.localeCompare(dateA);
+            return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+          });
+
+        document.getElementById("data-count-label").textContent = `${filtered.length} Transaksi`;
 
         if (filtered.length === 0) {
           emptyEl.classList.remove("hidden");
@@ -2577,7 +2744,7 @@
               <div class="min-w-0">
                 <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(tx.nama)}</p>
                 <p class="text-xs font-mono text-slate-600 mt-0.5 tabular-nums">${escapeHtml(tx.noKK)}</p>
-                <p class="text-xs text-slate-500 mt-1">RT/RW ${escapeHtml(tx.rtRw)} · ${formatShortDate(tx.timestamp)}</p>
+                <p class="text-xs text-slate-500 mt-1">RT/RW ${escapeHtml(tx.rtRw)} · Tgl Beli: <span class="font-medium text-slate-700">${escapeHtml(formatDateOnly(tx.tanggalPembelian || tx.timestamp))}</span></p>
               </div>
               <div class="text-right shrink-0 flex flex-col items-end gap-1.5">
                 <div>
@@ -2599,7 +2766,7 @@
 
         tableHead.innerHTML = `
           <tr>
-            <th class="py-3 px-4">Waktu</th>
+            <th class="py-3 px-4">Tanggal Pembelian</th>
             <th class="py-3 px-4">No. KK</th>
             <th class="py-3 px-4">Kepala Keluarga</th>
             <th class="py-3 px-4">RT/RW</th>
@@ -2611,7 +2778,7 @@
           .map(
             (tx) => `
             <tr class="hover:bg-slate-50/80 transition-colors">
-              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap tabular-nums">${formatShortDate(tx.timestamp)}</td>
+              <td class="py-3 px-4 text-xs text-slate-700 font-medium whitespace-nowrap tabular-nums">${escapeHtml(formatDateOnly(tx.tanggalPembelian || tx.timestamp))}</td>
               <td class="py-3 px-4 font-mono text-xs text-slate-700 whitespace-nowrap tabular-nums">${escapeHtml(tx.noKK)}</td>
               <td class="py-3 px-4 font-semibold text-slate-900">${escapeHtml(tx.nama)}</td>
               <td class="py-3 px-4 font-mono text-xs text-slate-600 whitespace-nowrap">${escapeHtml(tx.rtRw)}</td>
@@ -2725,7 +2892,13 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    function exportCSV() {
+    function buildSheetFromAoa(rows, colWidths) {
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws["!cols"] = colWidths.map((wch) => ({ wch }));
+      return ws;
+    }
+
+    function exportExcel() {
       if (!appState.session) return;
       const periodTx = getPeriodTransactions();
       if (periodTx.length === 0) {
@@ -2734,85 +2907,130 @@
       }
 
       const info = appState.session.kdkmp_info;
-      const safeUnitName = (info?.Nama_KDKMP || appState.session.Kode_KDKMP)
+      const unitCode = appState.session.Kode_KDKMP;
+      const unitName = info?.Nama_KDKMP || unitCode;
+      const safeUnitName = unitName
         .replace(/[^a-zA-Z0-9\s-]/g, "")
         .trim()
         .replace(/\s+/g, "-");
-      const filename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.csv`;
+
+      const sortedTx = [...periodTx].sort((a, b) => {
+        const dateA = a.tanggalPembelian || "";
+        const dateB = b.tanggalPembelian || "";
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
+      });
+
+      const historyHeaders = [
+        "Tanggal_Pembelian",
+        "Timestamp_WIB",
+        "Bulan_Periode",
+        "Kode_KDKMP",
+        "Nama_KDKMP",
+        "No_KK",
+        "Nama_Kepala_Keluarga",
+        "RT_RW",
+        "Jumlah_Pcs",
+        "Jumlah_Kg",
+      ];
+      const historyRows = [
+        historyHeaders,
+        ...sortedTx.map((tx) => [
+          tx.tanggalPembelian || "",
+          formatTimestampAsiaJakarta(tx.rawTimestamp || tx.timestamp),
+          tx.bulanPeriode,
+          unitCode,
+          unitName,
+          String(tx.noKK || ""),
+          tx.nama,
+          tx.rtRw,
+          Number(tx.jumlah) || 0,
+          (Number(tx.jumlah) || 0) * 5,
+        ]),
+      ];
+
+      const recapHeaders = [
+        "Kode_KDKMP",
+        "Nama_KDKMP",
+        "Bulan_Periode",
+        "No_KK",
+        "Nama_Kepala_Keluarga",
+        "RT_RW",
+        "Terpakai_Pcs",
+        "Terpakai_Kg",
+        "Kuota_Max_Pcs",
+        "Sisa_Unit_Pcs",
+      ];
+      const recapRows = [
+        recapHeaders,
+        ...buildRecapPerKK(periodTx).map((r) => [
+          unitCode,
+          unitName,
+          appState.selectedPeriod,
+          String(r.noKK || ""),
+          r.nama,
+          r.rtRw,
+          Number(r.terpakai) || 0,
+          (Number(r.terpakai) || 0) * 5,
+          Number(r.maxKuota) || 0,
+          Number(r.sisa) || 0,
+        ]),
+      ];
 
       const isRecap = appState.activeTab === "recap";
-      const csvRows = [];
 
-      if (isRecap) {
-        csvRows.push([
-          "Kode_KDKMP",
-          "Nama_KDKMP",
-          "Bulan_Periode",
-          "No_KK",
-          "Nama_Kepala_Keluarga",
-          "RT_RW",
-          "Terpakai_Pcs",
-          "Terpakai_Kg",
-          "Kuota_Max_Pcs",
-          "Sisa_Unit_Pcs",
-        ]);
-        buildRecapPerKK(periodTx).forEach((r) => {
-          csvRows.push([
-            appState.session.Kode_KDKMP,
-            info?.Nama_KDKMP || appState.session.Kode_KDKMP,
-            appState.selectedPeriod,
-            `'${r.noKK}`,
-            r.nama,
-            r.rtRw,
-            r.terpakai,
-            r.terpakai * 5,
-            r.maxKuota,
-            r.sisa,
-          ]);
-        });
-      } else {
-        csvRows.push([
-          "Timestamp",
-          "Bulan_Periode",
-          "Kode_KDKMP",
-          "Nama_KDKMP",
-          "No_KK",
-          "Nama_Kepala_Keluarga",
-          "RT_RW",
-          "Jumlah_Pcs",
-          "Jumlah_Kg",
-        ]);
-        periodTx.forEach((tx) => {
-          csvRows.push([
-            tx.timestamp || "",
-            tx.bulanPeriode,
-            appState.session.Kode_KDKMP,
-            info?.Nama_KDKMP || appState.session.Kode_KDKMP,
-            `'${tx.noKK}`,
-            tx.nama,
-            tx.rtRw,
-            tx.jumlah,
-            tx.jumlah * 5,
-          ]);
-        });
+      if (typeof XLSX !== "undefined" && XLSX.utils) {
+        const filename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.xlsx`;
+        const wb = XLSX.utils.book_new();
+        const wsHistory = buildSheetFromAoa(historyRows, [18, 25, 14, 15, 28, 20, 26, 12, 12, 12]);
+        const wsRecap = buildSheetFromAoa(recapRows, [15, 28, 14, 20, 26, 12, 14, 14, 15, 14]);
+
+        if (isRecap) {
+          XLSX.utils.book_append_sheet(wb, wsRecap, "Rekap per KK");
+          XLSX.utils.book_append_sheet(wb, wsHistory, "Riwayat Transaksi");
+        } else {
+          XLSX.utils.book_append_sheet(wb, wsHistory, "Riwayat Transaksi");
+          XLSX.utils.book_append_sheet(wb, wsRecap, "Rekap per KK");
+        }
+
+        XLSX.writeFile(wb, filename);
+        showToast(`File Excel ${filename} berhasil diunduh`, "success");
+        return;
       }
 
-      const csvContent =
-        "\uFEFF" +
-        csvRows
-          .map((row) => row.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
-          .join("\n");
+      // Fallback XML Spreadsheet 2003 (.xls) jika library SheetJS CDN tidak termuat
+      const fallbackFilename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.xls`;
+      const activeRows = isRecap ? recapRows : historyRows;
+      const sheetName = isRecap ? "Rekap per KK" : "Riwayat Transaksi";
+      const xmlRows = activeRows
+        .map(
+          (row, rIdx) =>
+            `<Row>${row
+              .map((cell) => {
+                const isNum = rIdx > 0 && typeof cell === "number" && !isNaN(cell);
+                const type = isNum ? "Number" : "String";
+                return `<Cell><Data ss:Type="${type}">${escapeXml(cell)}</Data></Cell>`;
+              })
+              .join("")}</Row>`
+        )
+        .join("");
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const xmlContent =
+        `<?xml version="1.0" encoding="UTF-8"?>` +
+        `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">` +
+        `<Worksheet ss:Name="${escapeXml(sheetName)}"><Table>${xmlRows}</Table></Worksheet>` +
+        `</Workbook>`;
+
+      const blob = new Blob([xmlContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = filename;
+      link.download = fallbackFilename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
 
-      showToast(`File ${filename} berhasil diunduh`, "success");
+      showToast(`File Excel ${fallbackFilename} berhasil diunduh`, "success");
     }
 
     // =========================================================================
@@ -3169,6 +3387,49 @@
       const [y, m] = ym.split("-");
       const date = new Date(Number(y), Number(m) - 1, 1);
       return date.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    }
+
+    function formatTimestampAsiaJakarta(rawTs) {
+      const str = String(rawTs ?? "").trim();
+      if (!str) return "";
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+
+      const hasExplicitTz = /(?:Z|[+-]\d{2}:?\d{2}|GMT|UTC)$/i.test(str) || /[+-]\d{4}\s*\(/.test(str);
+      if (!hasExplicitTz && /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?/.test(str)) {
+        const match = str.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)/);
+        if (match) {
+          const timePart = match[2].length === 5 ? `${match[2]}:00` : match[2];
+          return `${match[1]} ${timePart} WIB`;
+        }
+      }
+
+      let d = new Date(str);
+      if (isNaN(d.getTime()) && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(str)) {
+        d = new Date(str.replace(/\s+/, "T"));
+      }
+      if (isNaN(d.getTime())) return str;
+
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Jakarta",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(d);
+      const get = (type) => parts.find((p) => p.type === type)?.value || "";
+      return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} WIB`;
+    }
+
+    function escapeXml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
     }
 
     function escapeHtml(str) {
