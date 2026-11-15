@@ -1,0 +1,6 @@
+{
+  "name": "SPHP KDKMP - Pencatatan & Kontrol Distribusi Beras SPHP",
+  "description": "Aplikasi universal multi-koperasi untuk pencatatan, validasi kuota dinamis, dan rekap distribusi Beras SPHP Koperasi Desa Kelurahan Merah Putih (KDKMP) terintegrasi Google Sheets dan OCR Kartu Keluarga.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

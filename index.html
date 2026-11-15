@@ -1,0 +1,3048 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>SPHP KDKMP — Sistem Pencatatan &amp; Kontrol Distribusi Beras SPHP</title>
+  <meta name="description" content="Aplikasi universal multi-koperasi dengan isolasi data PIN per KDKMP untuk pencatatan, validasi kuota lintas koperasi, scan OCR Kartu Keluarga, dan rekap distribusi Beras SPHP." />
+  <meta property="og:title" content="SPHP KDKMP — Pencatatan &amp; Kontrol Distribusi Beras SPHP" />
+  <meta property="og:description" content="Sistem pencatatan distribusi Beras SPHP multi-koperasi KDKMP dengan isolasi PIN, validasi kuota lintas koperasi, OCR KK, dan Google Sheets." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="theme-color" content="#C8102E" />
+
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+          },
+          colors: {
+            merah: {
+              DEFAULT: '#C8102E',
+              dark: '#A00C24',
+              light: '#FEF2F2',
+              border: '#FECACA',
+            },
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
+  <!-- Tesseract.js v5 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+      -webkit-font-smoothing: antialiased;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .text-balance {
+      text-wrap: balance;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-96 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ========================================================= -->
+  <!-- TOP STICKY HEADER                                         -->
+  <!-- ========================================================= -->
+  <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-4">
+      <!-- Brand Zone -->
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-lg border border-slate-200 overflow-hidden shrink-0 flex flex-col shadow-xs" aria-hidden="true">
+          <div class="h-1/2 bg-[#C8102E]"></div>
+          <div class="h-1/2 bg-white"></div>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-sm sm:text-base font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0">SPHP KDKMP</span>
+            <span id="header-divider" class="text-slate-300 hidden" aria-hidden="true">/</span>
+            <span id="header-kdkmp-name" class="text-sm font-semibold text-[#C8102E] truncate hidden"></span>
+          </div>
+          <p id="header-kdkmp-meta" class="text-xs text-slate-500 truncate">
+            Sistem Kontrol Distribusi Beras SPHP Merah Putih
+          </p>
+        </div>
+      </div>
+
+      <!-- Header Actions -->
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          id="btn-share-link"
+          type="button"
+          onclick="copyShareLink()"
+          title="Salin Link Login Khusus KDKMP"
+          class="hidden items-center gap-1.5 px-3 min-h-[40px] text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]"
+        >
+          <i data-lucide="share-2" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">Bagikan Link</span>
+        </button>
+
+        <button
+          id="btn-logout-kdkmp"
+          type="button"
+          onclick="logoutKdkmp()"
+          class="hidden items-center gap-1.5 px-3 sm:px-3.5 min-h-[40px] text-xs font-semibold text-white bg-[#C8102E] hover:bg-[#A00C24] rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:ring-offset-2"
+        >
+          <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+          <span>Keluar / Ganti KDKMP</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- VIEW 1: LAYAR LOGIN & PENDAFTARAN UNIT KDKMP              -->
+  <!-- ========================================================= -->
+  <main id="auth-screen" class="flex-1 flex flex-col justify-center py-8 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-lg w-full mx-auto space-y-5">
+      <!-- Intro Header -->
+      <div class="text-center space-y-1.5">
+        <p class="text-xs font-semibold text-[#C8102E] tracking-wide">Koperasi Desa Kelurahan Merah Putih</p>
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 text-balance">
+          Portal Distribusi Beras SPHP
+        </h1>
+        <p class="text-sm text-slate-500">
+          Masuk dengan PIN rahasia unit KDKMP Anda untuk menjaga kerahasiaan data transaksi koperasi.
+        </p>
+      </div>
+
+      <!-- Auth Card -->
+      <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+        <!-- Segmented Tabs: Login vs Daftar Baru -->
+        <div class="p-2 bg-slate-100 border-b border-slate-200 grid grid-cols-2 gap-1.5">
+          <button
+            id="auth-tab-login"
+            type="button"
+            onclick="switchAuthTab('login')"
+            class="min-h-[44px] px-3 rounded-xl text-xs sm:text-sm font-semibold bg-white text-slate-900 shadow-xs transition-colors"
+          >
+            Masuk Unit KDKMP
+          </button>
+          <button
+            id="auth-tab-register"
+            type="button"
+            onclick="switchAuthTab('register')"
+            class="min-h-[44px] px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+          >
+            Daftarkan KDKMP Baru
+          </button>
+        </div>
+
+        <!-- PANEL A: LOGIN KDKMP -->
+        <div id="auth-panel-login" class="p-5 sm:p-6">
+          <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+            <!-- Dropdown Pilih KDKMP Aktif -->
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="login-kdkmp-select" class="block text-sm font-semibold text-slate-800">
+                  Pilih Unit KDKMP (Aktif)
+                </label>
+                <button
+                  type="button"
+                  onclick="loadActiveKdkmpList(true)"
+                  class="inline-flex items-center gap-1 text-xs font-semibold text-[#C8102E] hover:text-[#A00C24]"
+                >
+                  <i id="login-list-refresh-icon" data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  <span>Muat Ulang</span>
+                </button>
+              </div>
+              <select
+                id="login-kdkmp-select"
+                required
+                onchange="handleLoginSelectChange()"
+                class="w-full min-h-[48px] px-3.5 text-sm font-medium bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              >
+                <option value="">Memuat daftar KDKMP aktif...</option>
+              </select>
+              <p id="login-kdkmp-meta-hint" class="text-xs text-slate-500 mt-1.5">
+                Hanya unit KDKMP yang telah disetujui Admin Pusat yang tampil di daftar ini.
+              </p>
+            </div>
+
+            <!-- Input 6 Digit PIN -->
+            <div>
+              <label for="login-pin-input" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                6 Digit PIN KDKMP
+              </label>
+              <div class="relative">
+                <input
+                  id="login-pin-input"
+                  type="password"
+                  inputmode="numeric"
+                  maxlength="6"
+                  pattern="\d{6}"
+                  autocomplete="current-password"
+                  placeholder="Masukkan 6 digit PIN rahasia"
+                  oninput="this.value = this.value.replace(/\D/g, '').slice(0, 6)"
+                  required
+                  class="w-full min-h-[48px] pl-3.5 pr-12 font-mono text-base tracking-[0.25em] bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 placeholder:font-sans placeholder:tracking-normal placeholder:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+                />
+                <button
+                  type="button"
+                  onclick="togglePasswordVisibility('login-pin-input', 'login-pin-eye')"
+                  aria-label="Tampilkan atau sembunyikan PIN"
+                  class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center"
+                >
+                  <i id="login-pin-eye" data-lucide="eye" class="w-4 h-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Login Error Alert -->
+            <div id="login-error-box" class="hidden rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2.5">
+              <i data-lucide="shield-alert" class="w-4 h-4 text-red-600 shrink-0 mt-0.5"></i>
+              <p id="login-error-msg" class="text-xs font-medium text-red-800"></p>
+            </div>
+
+            <button
+              id="btn-login-submit"
+              type="submit"
+              class="w-full min-h-[48px] px-5 bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 disabled:text-slate-500 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:ring-offset-2"
+            >
+              <i data-lucide="lock-open" class="w-4 h-4"></i>
+              <span id="btn-login-text">Masuk ke Dashboard</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- PANEL B: PENDAFTARAN KDKMP BARU -->
+        <div id="auth-panel-register" class="hidden p-5 sm:p-6">
+          <form id="register-form" onsubmit="handleRegisterKdkmp(event)" class="space-y-4">
+            <div class="rounded-xl bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600">
+              Pendaftaran unit baru berstatus <strong>PENDING</strong> hingga diverifikasi dan diaktifkan oleh Admin Pusat.
+            </div>
+
+            <div>
+              <label for="reg-nama-kdkmp" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                Nama KDKMP
+              </label>
+              <input
+                id="reg-nama-kdkmp"
+                type="text"
+                placeholder="Contoh: KDKMP Mangkurakyat"
+                required
+                class="w-full min-h-[44px] px-3.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              />
+            </div>
+
+            <div>
+              <label for="reg-wilayah" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                Wilayah (Desa/Kelurahan, Kecamatan, Kabupaten)
+              </label>
+              <input
+                id="reg-wilayah"
+                type="text"
+                placeholder="Contoh: Desa Mangkurakyat, Kec. Cilawu, Kab. Garut"
+                required
+                class="w-full min-h-[44px] px-3.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label for="reg-kuota" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                  Usulan Kuota Max / KK / Bln
+                </label>
+                <input
+                  id="reg-kuota"
+                  type="number"
+                  min="1"
+                  max="50"
+                  value="5"
+                  required
+                  class="w-full min-h-[44px] px-3.5 text-sm font-mono font-semibold bg-slate-50 border border-slate-300 rounded-xl tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+                />
+              </div>
+              <div>
+                <label for="reg-pic" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                  Nama Penanggung Jawab (PIC)
+                </label>
+                <input
+                  id="reg-pic"
+                  type="text"
+                  placeholder="Nama lengkap PIC"
+                  required
+                  class="w-full min-h-[44px] px-3.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label for="reg-wa" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                Nomor WhatsApp PIC
+              </label>
+              <input
+                id="reg-wa"
+                type="tel"
+                inputmode="tel"
+                placeholder="Contoh: 081234567890"
+                required
+                class="w-full min-h-[44px] px-3.5 text-sm font-mono bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label for="reg-pin" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                  Buat 6 Digit PIN Rahasia
+                </label>
+                <input
+                  id="reg-pin"
+                  type="password"
+                  inputmode="numeric"
+                  maxlength="6"
+                  pattern="\d{6}"
+                  placeholder="6 digit angka"
+                  oninput="this.value = this.value.replace(/\D/g, '').slice(0, 6)"
+                  required
+                  class="w-full min-h-[44px] px-3.5 font-mono text-sm tracking-widest bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+                />
+              </div>
+              <div>
+                <label for="reg-pin-confirm" class="block text-sm font-semibold text-slate-800 mb-1.5">
+                  Konfirmasi 6 Digit PIN
+                </label>
+                <input
+                  id="reg-pin-confirm"
+                  type="password"
+                  inputmode="numeric"
+                  maxlength="6"
+                  pattern="\d{6}"
+                  placeholder="Ulangi 6 digit PIN"
+                  oninput="this.value = this.value.replace(/\D/g, '').slice(0, 6)"
+                  required
+                  class="w-full min-h-[44px] px-3.5 font-mono text-sm tracking-widest bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+                />
+              </div>
+            </div>
+
+            <div id="register-error-box" class="hidden rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2.5">
+              <i data-lucide="alert-circle" class="w-4 h-4 text-red-600 shrink-0 mt-0.5"></i>
+              <p id="register-error-msg" class="text-xs font-medium text-red-800"></p>
+            </div>
+
+            <button
+              id="btn-register-submit"
+              type="submit"
+              class="w-full min-h-[48px] px-5 bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span id="btn-register-text">Ajukan Pendaftaran KDKMP</span>
+            </button>
+          </form>
+
+          <!-- Register Success Panel -->
+          <div id="register-success-panel" class="hidden space-y-4">
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+              <div class="flex items-center gap-2 text-emerald-900">
+                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-600 shrink-0"></i>
+                <p class="text-sm font-bold">Pendaftaran KDKMP Berhasil Dikirim</p>
+              </div>
+              <p class="text-xs text-emerald-800">
+                Mohon catat dan simpan <strong>Kode KDKMP</strong> serta <strong>PIN Rahasia</strong> Anda di bawah ini sambil menunggu persetujuan Admin Utama (status <span class="font-mono font-semibold">PENDING</span>).
+              </p>
+              <div class="bg-white border border-emerald-200 rounded-xl p-3 grid grid-cols-2 gap-3 mt-2">
+                <div>
+                  <p class="text-[11px] text-slate-500">Kode KDKMP</p>
+                  <p id="reg-success-kode" class="font-mono text-sm font-bold text-[#C8102E] select-all">-</p>
+                </div>
+                <div>
+                  <p class="text-[11px] text-slate-500">PIN KDKMP Anda</p>
+                  <p id="reg-success-pin" class="font-mono text-sm font-bold text-slate-900 select-all">------</p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onclick="resetRegisterToLogin()"
+              class="w-full min-h-[46px] bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-semibold rounded-xl transition-colors"
+            >
+              Kembali ke Halaman Masuk
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Action on Login Screen: Admin Pusat -->
+      <div class="flex items-center justify-between text-xs text-slate-500 px-1">
+        <span>Isolasi data ketat per unit KDKMP</span>
+        <button
+          type="button"
+          onclick="openAdminModal()"
+          class="inline-flex items-center gap-1.5 font-semibold text-slate-700 hover:text-[#C8102E] py-2 px-2.5 rounded-lg hover:bg-slate-100 transition-colors"
+        >
+          <i data-lucide="shield-check" class="w-4 h-4"></i>
+          <span>Admin Pusat</span>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- VIEW 2: DASHBOARD OPERASIONAL KDKMP TEROTENTIKASI         -->
+  <!-- ========================================================= -->
+  <main id="dashboard-screen" class="hidden flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-5">
+
+    <!-- Unit Context & Period Bar -->
+    <section class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div class="min-w-0 space-y-1">
+        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
+          <span id="unit-code-label" class="font-mono font-semibold text-[#C8102E]">—</span>
+          <span aria-hidden="true">·</span>
+          <span id="unit-region-label">Wilayah Operasional</span>
+          <span aria-hidden="true">·</span>
+          <span id="unit-quota-label" class="font-medium text-slate-700 tabular-nums">Kuota Maks: 5 pcs (25 kg) / KK / Bulan</span>
+        </div>
+        <h1 id="unit-title-heading" class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 text-balance truncate">
+          Unit KDKMP
+        </h1>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 min-h-[44px]">
+          <i data-lucide="calendar" class="w-4 h-4 text-slate-500 shrink-0"></i>
+          <label for="period-select" class="text-xs font-medium text-slate-600 whitespace-nowrap">Periode:</label>
+          <input
+            id="period-select"
+            type="month"
+            onchange="handlePeriodChange()"
+            class="bg-transparent text-sm font-semibold text-slate-900 focus:outline-none tabular-nums cursor-pointer"
+          />
+        </div>
+
+        <button
+          id="btn-refresh-data"
+          type="button"
+          onclick="fetchAuthenticatedTransactions(true)"
+          class="inline-flex items-center gap-1.5 px-3.5 min-h-[44px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]"
+        >
+          <i id="refresh-icon" data-lucide="refresh-cw" class="w-4 h-4"></i>
+          <span>Sinkronkan</span>
+        </button>
+
+        <button
+          id="btn-export-csv"
+          type="button"
+          onclick="exportCSV()"
+          class="inline-flex items-center gap-1.5 px-3.5 min-h-[44px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]"
+        >
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Export CSV</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Error Notice Banner -->
+    <div id="sync-error-banner" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-start gap-3">
+        <i data-lucide="alert-circle" class="w-5 h-5 text-red-600 shrink-0 mt-0.5"></i>
+        <div>
+          <p class="text-sm font-semibold text-red-900">Gagal menyinkronkan data dari Google Sheets</p>
+          <p id="sync-error-detail" class="text-xs text-red-700 mt-0.5">Periksa koneksi internet atau URL Apps Script Web App.</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onclick="fetchAuthenticatedTransactions(true)"
+        class="px-3.5 min-h-[40px] text-xs font-semibold text-red-800 bg-white border border-red-200 rounded-lg hover:bg-red-100 transition-colors whitespace-nowrap shrink-0 self-start sm:self-center"
+      >
+        Coba Lagi
+      </button>
+    </div>
+
+    <!-- 2-Column Workspace Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- Left Column: Input Form & Global Privacy-Preserving Quota Check -->
+      <section class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-5 sm:p-6">
+        <div class="border-b border-slate-100 pb-4 mb-5">
+          <h2 class="text-lg font-bold text-slate-900">Catat Penjualan Beras SPHP</h2>
+          <p class="text-xs text-slate-500 mt-1">1 kemasan = 5 kg · Validasi kuota otomatis lintas KDKMP</p>
+        </div>
+
+        <form id="transaction-form" onsubmit="handleSaveTransaction(event)" class="space-y-4">
+          <!-- No. KK + Scan KK -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="input-no-kk" class="block text-sm font-semibold text-slate-800">
+                Nomor Kartu Keluarga (KK)
+              </label>
+              <span id="kk-digit-counter" class="text-xs font-mono text-slate-500 tabular-nums">0/16 digit</span>
+            </div>
+            <div class="flex items-stretch gap-2">
+              <div class="relative flex-1">
+                <input
+                  id="input-no-kk"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  maxlength="16"
+                  placeholder="16 digit Nomor KK"
+                  oninput="handleNoKKInput(this)"
+                  required
+                  class="w-full min-h-[48px] pl-3.5 pr-9 font-mono text-base tracking-wide bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 placeholder:font-sans placeholder:text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E] transition-colors"
+                />
+                <button
+                  id="btn-clear-kk"
+                  type="button"
+                  onclick="clearKKInput()"
+                  title="Hapus Nomor KK"
+                  class="hidden absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 flex items-center justify-center"
+                >
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <button
+                id="btn-open-scan"
+                type="button"
+                onclick="openScannerModal()"
+                class="inline-flex items-center justify-center gap-2 px-4 min-h-[48px] bg-[#C8102E] hover:bg-[#A00C24] active:scale-[0.98] text-white text-sm font-semibold rounded-xl transition-all whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:ring-offset-2"
+              >
+                <i data-lucide="camera" class="w-4 h-4"></i>
+                <span>Scan KK</span>
+              </button>
+            </div>
+
+            <!-- Real-Time Cross-KDKMP Quota Status -->
+            <div id="quota-status-box" class="mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-start gap-2.5">
+              <i id="quota-status-icon" data-lucide="info" class="w-4 h-4 text-slate-500 shrink-0 mt-0.5"></i>
+              <div class="min-w-0 flex-1">
+                <p id="quota-status-title" class="text-xs font-semibold text-slate-700">Menunggu Nomor KK (16 digit)</p>
+                <p id="quota-status-desc" class="text-xs text-slate-500 mt-0.5 tabular-nums">Masukkan atau pindai Kartu Keluarga untuk memeriksa kuota lintas koperasi.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Nama Kepala Keluarga -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="input-nama" class="block text-sm font-semibold text-slate-800">
+                Nama Kepala Keluarga
+              </label>
+              <span id="autofill-badge" class="hidden text-xs font-medium text-emerald-700">Terisi otomatis</span>
+            </div>
+            <input
+              id="input-nama"
+              type="text"
+              placeholder="Nama lengkap sesuai Kartu Keluarga"
+              required
+              class="w-full min-h-[46px] px-3.5 text-sm bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E] transition-colors"
+            />
+          </div>
+
+          <!-- RT / RW -->
+          <div>
+            <label for="input-rtrw" class="block text-sm font-semibold text-slate-800 mb-1.5">
+              RT / RW
+            </label>
+            <input
+              id="input-rtrw"
+              type="text"
+              placeholder="Contoh: 002/005"
+              required
+              class="w-full min-h-[46px] px-3.5 text-sm font-mono bg-slate-50 border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 placeholder:font-sans focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E] transition-colors"
+            />
+          </div>
+
+          <!-- Jumlah Beli -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="input-jumlah" class="block text-sm font-semibold text-slate-800">
+                Jumlah Beli (Pcs · 5 kg/pcs)
+              </label>
+              <span id="jumlah-kg-preview" class="text-xs font-semibold text-[#C8102E] tabular-nums">= 5 kg Beras SPHP</span>
+            </div>
+
+            <div id="qty-quick-buttons" class="grid grid-cols-5 gap-2 mb-2.5"></div>
+
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                onclick="adjustQuantity(-1)"
+                aria-label="Kurangi jumlah"
+                class="w-12 min-h-[46px] flex items-center justify-center bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-800 font-bold text-lg transition-colors"
+              >
+                −
+              </button>
+              <input
+                id="input-jumlah"
+                type="number"
+                min="1"
+                value="1"
+                oninput="handleQuantityInput()"
+                required
+                class="flex-1 min-h-[46px] text-center font-mono text-base font-bold bg-slate-50 border border-slate-300 rounded-xl text-slate-900 tabular-nums focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              />
+              <button
+                type="button"
+                onclick="adjustQuantity(1)"
+                aria-label="Tambah jumlah"
+                class="w-12 min-h-[46px] flex items-center justify-center bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-800 font-bold text-lg transition-colors"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2">
+            <button
+              id="btn-submit-tx"
+              type="submit"
+              disabled
+              class="w-full min-h-[48px] px-5 bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:ring-offset-2"
+            >
+              <i data-lucide="save" class="w-4 h-4"></i>
+              <span id="btn-submit-text">Simpan Transaksi</span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Right Column: Summary Cards + History & Rekap Tabs -->
+      <section class="lg:col-span-7 space-y-5">
+
+        <!-- 3 Summary Metric Cards (Strict Isolation: Active KDKMP Only) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
+            <p class="text-xs font-medium text-slate-500">Total Transaksi</p>
+            <p id="stat-total-tx" class="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 tabular-nums">0</p>
+            <p id="stat-period-label" class="text-xs text-slate-500 mt-1 tabular-nums">Periode aktif</p>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
+            <p class="text-xs font-medium text-slate-500">Total Beras Terjual</p>
+            <div class="flex items-baseline gap-2 mt-1">
+              <span id="stat-total-pcs" class="text-2xl sm:text-3xl font-bold text-[#C8102E] tabular-nums">0</span>
+              <span class="text-sm font-semibold text-slate-600">pcs</span>
+            </div>
+            <p id="stat-total-kg" class="text-xs font-semibold text-slate-700 mt-1 tabular-nums">0 kg Beras SPHP</p>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5">
+            <p class="text-xs font-medium text-slate-500">Total KK Terlayani</p>
+            <p id="stat-total-kk" class="text-2xl sm:text-3xl font-bold text-slate-900 mt-1 tabular-nums">0</p>
+            <p id="stat-kk-exhausted" class="text-xs text-slate-500 mt-1 tabular-nums">0 KK mencapai batas unit</p>
+          </div>
+        </div>
+
+        <!-- Tabs, Search, and Data Table/List -->
+        <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <!-- Segmented Tabs -->
+              <div class="inline-flex p-1 bg-slate-100 rounded-xl self-start">
+                <button
+                  id="tab-btn-history"
+                  type="button"
+                  onclick="switchTab('history')"
+                  class="px-3.5 min-h-[40px] text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 bg-white text-slate-900 shadow-xs"
+                >
+                  Riwayat Transaksi
+                </button>
+                <button
+                  id="tab-btn-recap"
+                  type="button"
+                  onclick="switchTab('recap')"
+                  class="px-3.5 min-h-[40px] text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 text-slate-600 hover:text-slate-900"
+                >
+                  Rekap per KK
+                </button>
+              </div>
+
+              <!-- Quick Search -->
+              <div class="relative flex-1 sm:max-w-xs">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input
+                  id="search-input"
+                  type="text"
+                  placeholder="Cari No. KK, Nama, RT/RW..."
+                  oninput="renderDataView()"
+                  class="w-full min-h-[42px] pl-9 pr-3 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+                />
+              </div>
+            </div>
+
+            <!-- Rekap Status Filter -->
+            <div id="recap-filter-bar" class="hidden flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="setRecapFilter('all')" data-recap-filter="all" class="recap-filter-btn px-3 min-h-[34px] text-xs font-semibold rounded-lg bg-slate-900 text-white transition-colors">Semua KK</button>
+                <button type="button" onclick="setRecapFilter('available')" data-recap-filter="available" class="recap-filter-btn px-3 min-h-[34px] text-xs font-medium rounded-lg bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors">Sisa Kuota</button>
+                <button type="button" onclick="setRecapFilter('exhausted')" data-recap-filter="exhausted" class="recap-filter-btn px-3 min-h-[34px] text-xs font-medium rounded-lg bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors">Kuota Habis</button>
+              </div>
+              <span id="data-count-label" class="text-xs text-slate-500 tabular-nums">0 KK</span>
+            </div>
+          </div>
+
+          <!-- Loading Skeleton -->
+          <div id="data-loading" class="hidden p-5 space-y-3">
+            <div class="h-11 bg-slate-100 rounded-xl animate-pulse"></div>
+            <div class="h-11 bg-slate-100 rounded-xl animate-pulse"></div>
+            <div class="h-11 bg-slate-100 rounded-xl animate-pulse"></div>
+            <div class="h-11 bg-slate-100 rounded-xl animate-pulse"></div>
+          </div>
+
+          <!-- Empty State -->
+          <div id="data-empty" class="hidden py-12 px-6 text-center">
+            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <i data-lucide="inbox" class="w-6 h-6"></i>
+            </div>
+            <p class="text-sm font-semibold text-slate-800">Belum ada data distribusi</p>
+            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              Catat transaksi penjualan Beras SPHP pertama untuk unit dan periode ini menggunakan formulir di sebelah kiri.
+            </p>
+          </div>
+
+          <!-- Mobile List View -->
+          <div id="mobile-data-list" class="md:hidden divide-y divide-slate-100"></div>
+
+          <!-- Desktop Table View -->
+          <div id="desktop-table-wrapper" class="hidden md:block overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead id="desktop-table-head" class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-600"></thead>
+              <tbody id="desktop-table-body" class="divide-y divide-slate-100 text-sm"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-200 bg-white mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <p>Sistem Kontrol Distribusi Beras SPHP · Koperasi Desa Kelurahan Merah Putih (KDKMP)</p>
+      <p class="tabular-nums">1 Kemasan = 5 kg · Isolasi Data Terotentikasi PIN</p>
+    </div>
+  </footer>
+
+  <!-- ========================================================= -->
+  <!-- MODAL 1: PANEL ADMIN PUSAT (VERIFIKASI & APPROVAL)        -->
+  <!-- ========================================================= -->
+  <div id="modal-admin" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-admin-title">
+    <div id="modal-admin-card" class="bg-white w-full sm:max-w-3xl rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 shrink-0">
+        <div>
+          <h2 id="modal-admin-title" class="text-base sm:text-lg font-bold text-slate-900">Panel Admin Pusat KDKMP</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Verifikasi pendaftaran unit baru, kelola status aktif, dan cek info PIC</p>
+        </div>
+        <button
+          type="button"
+          onclick="closeAdminModal()"
+          aria-label="Tutup panel admin"
+          class="w-10 h-10 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center shrink-0"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Step 1: Admin PIN Verification -->
+      <div id="admin-auth-step" class="p-5 sm:p-6">
+        <form onsubmit="handleAdminLogin(event)" class="max-w-sm mx-auto space-y-4">
+          <div>
+            <label for="admin-pin-input" class="block text-sm font-semibold text-slate-800 mb-1.5">
+              Masukkan PIN Admin Utama
+            </label>
+            <div class="relative">
+              <input
+                id="admin-pin-input"
+                type="password"
+                autocomplete="off"
+                placeholder="PIN Admin Pusat"
+                required
+                class="w-full min-h-[46px] pl-3.5 pr-12 font-mono text-base bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              />
+              <button
+                type="button"
+                onclick="togglePasswordVisibility('admin-pin-input', 'admin-pin-eye')"
+                aria-label="Tampilkan atau sembunyikan PIN Admin"
+                class="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-lg text-slate-400 hover:text-slate-700 flex items-center justify-center"
+              >
+                <i id="admin-pin-eye" data-lucide="eye" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <div id="admin-error-box" class="hidden rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-medium text-red-800"></div>
+
+          <button
+            id="btn-admin-login"
+            type="submit"
+            class="w-full min-h-[46px] bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white text-sm font-bold rounded-xl transition-colors"
+          >
+            Buka Panel Admin
+          </button>
+        </form>
+      </div>
+
+      <!-- Step 2: Admin Unit Management List -->
+      <div id="admin-list-step" class="hidden flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div class="p-4 sm:px-5 border-b border-slate-200 space-y-2.5 bg-slate-50 shrink-0">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button type="button" onclick="setAdminFilter('ALL')" data-admin-filter="ALL" class="admin-filter-btn px-3 min-h-[36px] text-xs font-semibold rounded-lg bg-slate-900 text-white">Semua</button>
+              <button type="button" onclick="setAdminFilter('PENDING')" data-admin-filter="PENDING" class="admin-filter-btn px-3 min-h-[36px] text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-700">Pending</button>
+              <button type="button" onclick="setAdminFilter('AKTIF')" data-admin-filter="AKTIF" class="admin-filter-btn px-3 min-h-[36px] text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-700">Aktif</button>
+              <button type="button" onclick="setAdminFilter('DITOLAK')" data-admin-filter="DITOLAK" class="admin-filter-btn px-3 min-h-[36px] text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-700">Ditolak</button>
+            </div>
+            <div class="flex items-center gap-2">
+              <input
+                id="admin-search-input"
+                type="text"
+                placeholder="Cari nama/kode KDKMP..."
+                oninput="renderAdminUnits()"
+                class="flex-1 sm:w-48 min-h-[36px] px-3 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+              />
+              <button
+                type="button"
+                onclick="refreshAdminList()"
+                title="Muat ulang daftar"
+                class="min-h-[36px] px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1.5 shrink-0"
+              >
+                <i id="admin-refresh-icon" data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Muat Ulang</span>
+              </button>
+              <button
+                id="btn-api-settings"
+                type="button"
+                onclick="openApiModal()"
+                title="Pengaturan URL Google Apps Script"
+                class="min-h-[36px] px-3 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 inline-flex items-center gap-1.5 shrink-0"
+              >
+                <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+                <span>URL API</span>
+              </button>
+            </div>
+          </div>
+          <p id="admin-summary-line" class="text-xs text-slate-500 tabular-nums">Memuat ringkasan unit KDKMP...</p>
+        </div>
+
+        <div id="admin-units-container" class="p-4 sm:p-5 flex-1 min-h-[260px] overflow-y-auto space-y-3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL 2: SCAN KAMERA OCR NOMOR KK (TESSERACT.JS v5)       -->
+  <!-- ========================================================= -->
+  <div id="modal-scanner" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-scanner-title">
+    <div class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl max-h-[94vh] flex flex-col overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h2 id="modal-scanner-title" class="text-base sm:text-lg font-bold text-slate-900">Pindai Nomor KK (OCR)</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Arahkan kamera ke 16 digit Nomor KK atau unggah foto</p>
+        </div>
+        <button
+          type="button"
+          onclick="closeScannerModal()"
+          aria-label="Tutup pemindai"
+          class="w-10 h-10 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4">
+        <!-- Camera Viewport / Preview -->
+        <div class="relative bg-slate-950 rounded-2xl overflow-hidden aspect-4/3 flex items-center justify-center">
+          <video id="ocr-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+          <canvas id="ocr-canvas" class="hidden w-full h-full object-contain"></canvas>
+
+          <!-- Viewfinder Reticle Overlay -->
+          <div id="ocr-viewfinder" class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-6">
+            <div class="w-full max-w-xs h-20 border-2 border-white/80 rounded-xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]">
+              <div class="absolute -top-1 -left-1 w-4 h-4 border-t-4 border-l-4 border-[#C8102E] rounded-tl-md"></div>
+              <div class="absolute -top-1 -right-1 w-4 h-4 border-t-4 border-r-4 border-[#C8102E] rounded-tr-md"></div>
+              <div class="absolute -bottom-1 -left-1 w-4 h-4 border-b-4 border-l-4 border-[#C8102E] rounded-bl-md"></div>
+              <div class="absolute -bottom-1 -right-1 w-4 h-4 border-b-4 border-r-4 border-[#C8102E] rounded-br-md"></div>
+            </div>
+            <p class="mt-3 text-xs font-medium text-white bg-black/60 px-3 py-1 rounded-lg">Posisikan angka 16 digit No. KK di dalam kotak</p>
+          </div>
+
+          <!-- Camera Fallback -->
+          <div id="ocr-camera-fallback" class="hidden absolute inset-0 bg-slate-900 text-white p-6 flex flex-col items-center justify-center text-center gap-2">
+            <i data-lucide="camera-off" class="w-8 h-8 text-slate-400"></i>
+            <p class="text-sm font-semibold">Kamera tidak dapat diakses</p>
+            <p id="ocr-camera-error-msg" class="text-xs text-slate-300 max-w-xs">Izinkan akses kamera pada browser atau gunakan tombol Unggah Foto KK di bawah.</p>
+          </div>
+        </div>
+
+        <!-- OCR Progress -->
+        <div id="ocr-progress-wrap" class="hidden space-y-1.5">
+          <div class="flex items-center justify-between text-xs font-medium">
+            <span id="ocr-progress-label" class="text-slate-700">Memproses gambar...</span>
+            <span id="ocr-progress-pct" class="font-mono text-[#C8102E] tabular-nums">0%</span>
+          </div>
+          <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div id="ocr-progress-bar" class="h-full bg-[#C8102E] transition-all duration-150" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- OCR Result Candidates -->
+        <div id="ocr-result-box" class="hidden rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-2">
+          <p id="ocr-result-title" class="text-xs font-semibold text-slate-800"></p>
+          <div id="ocr-candidates" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Scanner Buttons -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button
+            id="btn-capture-ocr"
+            type="button"
+            onclick="captureAndScan()"
+            class="min-h-[48px] px-4 bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+          >
+            <i data-lucide="scan-line" class="w-4 h-4"></i>
+            <span>Ambil Foto &amp; Scan</span>
+          </button>
+
+          <label class="min-h-[48px] px-4 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
+            <i data-lucide="upload" class="w-4 h-4"></i>
+            <span>Unggah Foto KK</span>
+            <input id="ocr-file-input" type="file" accept="image/*" class="hidden" onchange="handleFileScan(event)" />
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL 3: KONFIRMASI HAPUS TRANSAKSI TEROTENTIKASI         -->
+  <!-- ========================================================= -->
+  <div id="modal-delete-confirm" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
+    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+      <div class="p-5 sm:p-6 space-y-4">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+            <i data-lucide="trash-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 id="modal-delete-title" class="text-base font-bold text-slate-900">Hapus Transaksi Ini?</h2>
+            <p id="delete-confirm-detail" class="text-xs text-slate-600 mt-1">Data transaksi akan dihapus permanen dari Google Sheets unit ini.</p>
+          </div>
+        </div>
+        <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-2">
+          <button
+            type="button"
+            onclick="closeDeleteModal()"
+            class="min-h-[44px] px-4 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+          >
+            Batal
+          </button>
+          <button
+            id="btn-confirm-delete"
+            type="button"
+            onclick="executeDeleteTransaction()"
+            class="min-h-[44px] px-5 text-xs font-bold text-white bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 rounded-xl transition-colors"
+          >
+            Ya, Hapus Transaksi
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- MODAL 4: PENGATURAN URL GOOGLE APPS SCRIPT                -->
+  <!-- ========================================================= -->
+  <div id="modal-api" class="hidden fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-api-title">
+    <div class="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h2 id="modal-api-title" class="text-base sm:text-lg font-bold text-slate-900">Pengaturan Endpoint Google Sheets</h2>
+          <p class="text-xs text-slate-500 mt-0.5">URL Web App Google Apps Script untuk sinkronisasi data</p>
+        </div>
+        <button
+          type="button"
+          onclick="closeApiModal()"
+          aria-label="Tutup pengaturan API"
+          class="w-10 h-10 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form onsubmit="handleSaveApiUrl(event)" class="p-5 space-y-4">
+        <div>
+          <label for="input-api-url" class="block text-sm font-semibold text-slate-800 mb-1.5">
+            URL Google Apps Script (/exec)
+          </label>
+          <textarea
+            id="input-api-url"
+            rows="3"
+            required
+            class="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E]"
+          ></textarea>
+        </div>
+
+        <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-1">
+          <button
+            type="button"
+            onclick="resetDefaultApiUrl()"
+            class="min-h-[44px] px-4 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+          >
+            Reset ke URL Default
+          </button>
+          <button
+            type="submit"
+            class="min-h-[44px] px-5 text-xs font-bold text-white bg-[#C8102E] hover:bg-[#A00C24] rounded-xl transition-colors"
+          >
+            Simpan &amp; Hubungkan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- APPLICATION SCRIPT                                        -->
+  <!-- ========================================================= -->
+  <script>
+    // =========================================================================
+    // 1. KONFIGURASI & STATE APLIKASI
+    // =========================================================================
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKLr4SHHpCeX3VPRT2QFwh3gBD2mZNYtHTOV4Hghh7W48AZSg6idZsdSFNzIhdf5EH/exec";
+
+    const STORAGE_KEYS = {
+      API_URL: "kdkmp_sphp_api_url_v2",
+      SESSION: "kdkmp_sphp_auth_session_v2",
+    };
+
+    const appState = {
+      apiUrl: localStorage.getItem(STORAGE_KEYS.API_URL) || APPS_SCRIPT_URL,
+      session: null, // { Kode_KDKMP, PIN_KDKMP, kdkmp_info }
+      activeKdkmpList: [],
+      transactions: [],
+      selectedPeriod: getCurrentYearMonth(),
+      activeTab: "history", // 'history' | 'recap'
+      recapFilter: "all",   // 'all' | 'available' | 'exhausted'
+      isLoadingTx: false,
+      isSubmitting: false,
+      isCheckingQuota: false,
+      quotaState: {
+        checked: false,
+        noKK: "",
+        maxKuota: 5,
+        terpakaiGlobal: 0,
+        sisaGlobal: 5,
+        error: null,
+      },
+      pendingDeleteTx: null,
+      adminPin: "",
+      adminUnits: [],
+      adminFilter: "ALL",
+      cameraStream: null,
+      quotaDebounceTimer: null,
+    };
+
+    // =========================================================================
+    // 2. INISIALISASI APLIKASI & PEMERIKSAAN SESI
+    // =========================================================================
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+      document.getElementById("period-select").value = appState.selectedPeriod;
+
+      // Cek apakah ada sesi login KDKMP yang tersimpan di localStorage
+      const savedSession = loadSessionFromStorage();
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlKdkmp = (urlParams.get("kdkmp") || "").trim();
+
+      // Jika URL parameter menyebut ?kdkmp=KODE yang berbeda dari sesi, buka layar login pre-selected
+      if (
+        savedSession &&
+        savedSession.Kode_KDKMP &&
+        savedSession.PIN_KDKMP &&
+        (!urlKdkmp || urlKdkmp.toUpperCase() === savedSession.Kode_KDKMP.toUpperCase())
+      ) {
+        appState.session = savedSession;
+        showDashboardView();
+        fetchAuthenticatedTransactions(false);
+      } else {
+        showAuthView(urlKdkmp);
+      }
+    });
+
+    function getCurrentYearMonth() {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    }
+
+    function loadSessionFromStorage() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.SESSION);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.Kode_KDKMP && parsed.PIN_KDKMP) {
+          return {
+            Kode_KDKMP: String(parsed.Kode_KDKMP).trim(),
+            PIN_KDKMP: String(parsed.PIN_KDKMP).trim(),
+            kdkmp_info: normalizeUnit(parsed.kdkmp_info || { Kode_KDKMP: parsed.Kode_KDKMP }),
+          };
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function buildGetUrl(paramsObj) {
+      const url = new URL(appState.apiUrl);
+      Object.entries(paramsObj).forEach(([k, v]) => {
+        if (v !== undefined && v !== null) {
+          url.searchParams.set(k, String(v));
+        }
+      });
+      return url.toString();
+    }
+
+    // =========================================================================
+    // 3. NORMALISASI DATA SERVER
+    // =========================================================================
+    function pickField(obj, keys) {
+      if (!obj || typeof obj !== "object") return undefined;
+      for (const k of keys) {
+        if (obj[k] !== undefined && obj[k] !== null && String(obj[k]).trim() !== "") {
+          return obj[k];
+        }
+      }
+      const normalizedMap = {};
+      Object.keys(obj).forEach((origKey) => {
+        const clean = origKey.toLowerCase().replace(/[\s_-]+/g, "");
+        if (!(clean in normalizedMap)) normalizedMap[clean] = obj[origKey];
+      });
+      for (const k of keys) {
+        const clean = k.toLowerCase().replace(/[\s_-]+/g, "");
+        const val = normalizedMap[clean];
+        if (val !== undefined && val !== null && String(val).trim() !== "") {
+          return val;
+        }
+      }
+      return undefined;
+    }
+
+    function normalizeUnit(raw) {
+      if (!raw) return null;
+      if (Array.isArray(raw)) {
+        const kodeArr = String(raw[0] ?? "").trim();
+        const namaArr = String(raw[1] ?? kodeArr).trim();
+        if (!kodeArr && !namaArr) return null;
+        return {
+          Kode_KDKMP: kodeArr || namaArr,
+          Nama_KDKMP: namaArr || kodeArr,
+          Wilayah: String(raw[2] ?? "Wilayah Operasional").trim(),
+          Kuota_Max_Bulan: Math.max(1, parseInt(raw[3] ?? 5, 10) || 5),
+          Nama_PIC: String(raw[4] ?? "-").trim(),
+          No_WA: String(raw[5] ?? "-").trim(),
+          PIN_KDKMP: String(raw[6] ?? "").trim(),
+          Status: String(raw[7] ?? "AKTIF").trim().toUpperCase(),
+        };
+      }
+      if (typeof raw !== "object") return null;
+
+      const kode = String(
+        pickField(raw, ["Kode_KDKMP", "Kode_Koperasi", "Kode", "KDKMP_ID", "id"]) ?? ""
+      ).trim();
+      const nama = String(
+        pickField(raw, ["Nama_KDKMP", "Nama_Koperasi", "Nama_Unit", "Nama", "name"]) ?? kode
+      ).trim();
+      const wilayah = String(
+        pickField(raw, ["Wilayah", "Alamat", "Kecamatan", "Daerah", "Lokasi"]) ?? "Wilayah Operasional"
+      ).trim();
+      const kuotaRaw = pickField(raw, ["Kuota_Max_Bulan", "Kuota_Max", "Kuota_Bulan", "Kuota", "Max_Kuota"]);
+      const kuotaMax = Math.max(1, parseInt(kuotaRaw ?? 5, 10) || 5);
+      const status = String(
+        pickField(raw, ["Status", "Status_KDKMP", "Status_Approval", "State"]) ?? "AKTIF"
+      )
+        .trim()
+        .toUpperCase();
+      const namaPIC = String(
+        pickField(raw, ["Nama_PIC", "PIC", "Penanggung_Jawab", "Ketua", "Pengurus"]) ?? "-"
+      ).trim();
+      const noWA = String(
+        pickField(raw, ["No_WA", "WhatsApp", "No_Whatsapp", "No_HP", "Telp", "HP", "wa"]) ?? "-"
+      ).trim();
+      const pinKdkmp = String(
+        pickField(raw, ["PIN_KDKMP", "PIN", "Pin_Koperasi", "Password"]) ?? ""
+      ).trim();
+
+      if (!kode && !nama) return null;
+      return {
+        Kode_KDKMP: kode || nama,
+        Nama_KDKMP: nama || kode,
+        Wilayah: wilayah,
+        Kuota_Max_Bulan: kuotaMax,
+        Status: status,
+        Nama_PIC: namaPIC,
+        No_WA: noWA,
+        PIN_KDKMP: pinKdkmp,
+      };
+    }
+
+    function normalizeTransaction(raw, index = 0) {
+      if (!raw || typeof raw !== "object") return null;
+      const noKK = String(pickField(raw, ["No_KK", "NoKK", "Nomor_KK", "KK"]) ?? "")
+        .replace(/\D/g, "")
+        .trim();
+      if (!noKK) return null;
+
+      const nama = String(
+        pickField(raw, ["Nama_Kepala_Keluarga", "Nama_KK", "Nama_Pembeli", "Nama"]) ?? ""
+      ).trim();
+      const rtRw = String(pickField(raw, ["RT_RW", "RTRW", "RT", "Alamat"]) ?? "-").trim();
+      const jumlah = Math.max(
+        0,
+        parseInt(pickField(raw, ["Jumlah_Beli", "Jumlah", "Qty", "Pcs"]) ?? 0, 10) || 0
+      );
+      const timestampRaw = String(
+        pickField(raw, ["Timestamp", "Tanggal", "Waktu", "Created_At"]) ?? ""
+      ).trim();
+
+      let bulanPeriode = String(
+        pickField(raw, ["Bulan_Periode", "Periode", "Bulan"]) ?? ""
+      ).trim();
+      if (!/^\d{4}-\d{2}$/.test(bulanPeriode) && timestampRaw) {
+        const parsedDate = new Date(timestampRaw);
+        if (!isNaN(parsedDate.getTime())) {
+          bulanPeriode = `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`;
+        }
+      }
+      if (!bulanPeriode) bulanPeriode = appState.selectedPeriod;
+
+      return {
+        id: pickField(raw, ["ID", "Id", "Row"]) ?? null,
+        row: pickField(raw, ["Row", "RowIndex"]) ?? null,
+        clientKey: `${timestampRaw}_${noKK}_${index}`,
+        timestamp: timestampRaw,
+        bulanPeriode,
+        kodeKdkmp: String(pickField(raw, ["Kode_KDKMP", "KDKMP"]) ?? "").trim(),
+        noKK,
+        nama: nama || "Tanpa Nama",
+        rtRw: rtRw || "-",
+        jumlah,
+      };
+    }
+
+    // =========================================================================
+    // 4. LAYAR LOGIN, PENDAFTARAN KDKMP BARU & ISOLASI SESI
+    // =========================================================================
+    function showAuthView(preselectCode = "") {
+      document.getElementById("auth-screen").classList.remove("hidden");
+      document.getElementById("dashboard-screen").classList.add("hidden");
+      document.getElementById("header-divider").classList.add("hidden");
+      document.getElementById("header-kdkmp-name").classList.add("hidden");
+      document.getElementById("header-kdkmp-meta").textContent = "Sistem Kontrol Distribusi Beras SPHP Merah Putih";
+      document.getElementById("btn-logout-kdkmp").classList.add("hidden");
+      document.getElementById("btn-logout-kdkmp").classList.remove("inline-flex");
+      document.getElementById("btn-share-link").classList.add("hidden");
+      document.getElementById("btn-share-link").classList.remove("inline-flex");
+
+      switchAuthTab("login");
+      loadActiveKdkmpList(false, preselectCode);
+    }
+
+    function showDashboardView() {
+      if (!appState.session) return;
+      const info = appState.session.kdkmp_info || {
+        Kode_KDKMP: appState.session.Kode_KDKMP,
+        Nama_KDKMP: appState.session.Kode_KDKMP,
+        Wilayah: "Wilayah Operasional",
+        Kuota_Max_Bulan: 5,
+      };
+
+      document.getElementById("auth-screen").classList.add("hidden");
+      document.getElementById("dashboard-screen").classList.remove("hidden");
+      document.getElementById("header-divider").classList.remove("hidden");
+      document.getElementById("header-kdkmp-name").classList.remove("hidden");
+      document.getElementById("header-kdkmp-name").textContent = info.Nama_KDKMP;
+      document.getElementById("header-kdkmp-meta").textContent = `${info.Wilayah} · Maks ${info.Kuota_Max_Bulan} pcs/KK`;
+
+      const logoutBtn = document.getElementById("btn-logout-kdkmp");
+      logoutBtn.classList.remove("hidden");
+      logoutBtn.classList.add("inline-flex");
+
+      const shareBtn = document.getElementById("btn-share-link");
+      shareBtn.classList.remove("hidden");
+      shareBtn.classList.add("inline-flex");
+
+      document.getElementById("unit-code-label").textContent = info.Kode_KDKMP;
+      document.getElementById("unit-region-label").textContent = info.Wilayah;
+      document.getElementById("unit-quota-label").textContent =
+        `Kuota Maks: ${info.Kuota_Max_Bulan} pcs (${info.Kuota_Max_Bulan * 5} kg) / KK / Bulan`;
+      document.getElementById("unit-title-heading").textContent = info.Nama_KDKMP;
+
+      renderQuickQtyButtons();
+      resetQuotaStatusUI();
+      lucide.createIcons();
+    }
+
+    function switchAuthTab(tab) {
+      const loginTab = document.getElementById("auth-tab-login");
+      const regTab = document.getElementById("auth-tab-register");
+      const loginPanel = document.getElementById("auth-panel-login");
+      const regPanel = document.getElementById("auth-panel-register");
+
+      if (tab === "login") {
+        loginTab.className = "min-h-[44px] px-3 rounded-xl text-xs sm:text-sm font-semibold bg-white text-slate-900 shadow-xs transition-colors";
+        regTab.className = "min-h-[44px] px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors";
+        loginPanel.classList.remove("hidden");
+        regPanel.classList.add("hidden");
+      } else {
+        regTab.className = "min-h-[44px] px-3 rounded-xl text-xs sm:text-sm font-semibold bg-white text-slate-900 shadow-xs transition-colors";
+        loginTab.className = "min-h-[44px] px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors";
+        regPanel.classList.remove("hidden");
+        loginPanel.classList.add("hidden");
+      }
+    }
+
+    async function loadActiveKdkmpList(showToastOnDone = false, preselectCode = "") {
+      const select = document.getElementById("login-kdkmp-select");
+      const refreshIcon = document.getElementById("login-list-refresh-icon");
+      if (refreshIcon) refreshIcon.classList.add("animate-spin");
+
+      try {
+        const endpoint = buildGetUrl({ action: "list_kdkmp" });
+        const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        const rawList = Array.isArray(json)
+          ? json
+          : Array.isArray(json.kdkmp)
+          ? json.kdkmp
+          : Array.isArray(json.data)
+          ? json.data
+          : Array.isArray(json.units)
+          ? json.units
+          : [];
+
+        appState.activeKdkmpList = rawList
+          .map(normalizeUnit)
+          .filter((u) => u && (!u.Status || u.Status === "AKTIF"));
+
+        if (appState.activeKdkmpList.length === 0) {
+          select.innerHTML = `<option value="">Belum ada unit KDKMP berstatus AKTIF</option>`;
+        } else {
+          select.innerHTML =
+            `<option value="">-- Pilih Unit KDKMP --</option>` +
+            appState.activeKdkmpList
+              .map(
+                (u) =>
+                  `<option value="${escapeHtml(u.Kode_KDKMP)}">${escapeHtml(u.Nama_KDKMP)} (${escapeHtml(u.Kode_KDKMP)})</option>`
+              )
+              .join("");
+
+          const targetCode = preselectCode || new URLSearchParams(window.location.search).get("kdkmp") || "";
+          if (targetCode) {
+            const matched = appState.activeKdkmpList.find(
+              (u) => u.Kode_KDKMP.toUpperCase() === targetCode.trim().toUpperCase()
+            );
+            if (matched) {
+              select.value = matched.Kode_KDKMP;
+              handleLoginSelectChange();
+            }
+          }
+        }
+
+        if (showToastOnDone) {
+          showToast(`Daftar KDKMP aktif diperbarui (${appState.activeKdkmpList.length} unit)`, "success");
+        }
+      } catch (err) {
+        select.innerHTML = `<option value="">Gagal memuat daftar KDKMP (${escapeHtml(err.message)})</option>`;
+      } finally {
+        if (refreshIcon) refreshIcon.classList.remove("animate-spin");
+      }
+    }
+
+    function handleLoginSelectChange() {
+      const code = document.getElementById("login-kdkmp-select").value;
+      const hint = document.getElementById("login-kdkmp-meta-hint");
+      const unit = appState.activeKdkmpList.find((u) => u.Kode_KDKMP === code);
+      if (unit) {
+        hint.textContent = `${unit.Wilayah} · Kuota Max: ${unit.Kuota_Max_Bulan} pcs (${unit.Kuota_Max_Bulan * 5} kg)/KK/bulan`;
+      } else {
+        hint.textContent = "Hanya unit KDKMP yang telah disetujui Admin Pusat yang tampil di daftar ini.";
+      }
+      document.getElementById("login-error-box").classList.add("hidden");
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      const kodeKdkmp = document.getElementById("login-kdkmp-select").value.trim();
+      const pin = document.getElementById("login-pin-input").value.trim();
+      const errorBox = document.getElementById("login-error-box");
+      const errorMsg = document.getElementById("login-error-msg");
+      const btn = document.getElementById("btn-login-submit");
+      const btnText = document.getElementById("btn-login-text");
+
+      errorBox.classList.add("hidden");
+
+      if (!kodeKdkmp) {
+        errorMsg.textContent = "Silakan pilih unit KDKMP terlebih dahulu.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+      if (!/^\d{6}$/.test(pin)) {
+        errorMsg.textContent = "PIN KDKMP wajib terdiri dari 6 digit angka.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+
+      btn.disabled = true;
+      btnText.textContent = "Memverifikasi PIN KDKMP...";
+
+      try {
+        const endpoint = buildGetUrl({
+          action: "get_transactions",
+          kdkmp: kodeKdkmp,
+          pin: pin,
+        });
+        const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.status === "error" || json.success === false) {
+          throw new Error(json.message || "PIN KDKMP salah atau unit tidak aktif!");
+        }
+
+        // Kumpulkan info KDKMP dari response atau daftar aktif
+        const serverUnitInfo = normalizeUnit(json.kdkmp_info || json.kdkmp || json.unit);
+        const listUnitInfo = appState.activeKdkmpList.find((u) => u.Kode_KDKMP === kodeKdkmp);
+        const kdkmpInfo = serverUnitInfo || listUnitInfo || {
+          Kode_KDKMP: kodeKdkmp,
+          Nama_KDKMP: kodeKdkmp,
+          Wilayah: "Wilayah Operasional",
+          Kuota_Max_Bulan: 5,
+        };
+
+        const sessionObj = {
+          Kode_KDKMP: kodeKdkmp,
+          PIN_KDKMP: pin,
+          kdkmp_info: kdkmpInfo,
+        };
+
+        appState.session = sessionObj;
+        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(sessionObj));
+
+        // Simpan transaksi yang dikembalikan langsung oleh response login
+        const rawTx = extractTransactionArray(json);
+        appState.transactions = rawTx.map((row, idx) => normalizeTransaction(row, idx)).filter(Boolean);
+
+        // Update URL ?kdkmp= tanpa reload
+        const pageUrl = new URL(window.location.href);
+        pageUrl.searchParams.set("kdkmp", kodeKdkmp);
+        window.history.replaceState({}, "", pageUrl.toString());
+
+        document.getElementById("login-pin-input").value = "";
+        showDashboardView();
+        renderSummaryAndData();
+        showToast(`Berhasil masuk ke ${kdkmpInfo.Nama_KDKMP}`, "success");
+      } catch (err) {
+        errorMsg.textContent = err.message || "Gagal memverifikasi PIN KDKMP.";
+        errorBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = "Masuk ke Dashboard";
+      }
+    }
+
+    function logoutKdkmp() {
+      localStorage.removeItem(STORAGE_KEYS.SESSION);
+      appState.session = null;
+      appState.transactions = [];
+      resetQuotaStatusUI();
+      document.getElementById("transaction-form").reset();
+      document.getElementById("input-jumlah").value = "1";
+      showAuthView();
+      showToast("Anda telah keluar dari sesi KDKMP", "info");
+    }
+
+    async function handleRegisterKdkmp(e) {
+      e.preventDefault();
+      const namaKdkmp = document.getElementById("reg-nama-kdkmp").value.trim();
+      const wilayah = document.getElementById("reg-wilayah").value.trim();
+      const kuotaMax = Math.max(1, parseInt(document.getElementById("reg-kuota").value, 10) || 5);
+      const namaPic = document.getElementById("reg-pic").value.trim();
+      const noWa = document.getElementById("reg-wa").value.trim();
+      const pin = document.getElementById("reg-pin").value.trim();
+      const pinConfirm = document.getElementById("reg-pin-confirm").value.trim();
+
+      const errorBox = document.getElementById("register-error-box");
+      const errorMsg = document.getElementById("register-error-msg");
+      const btn = document.getElementById("btn-register-submit");
+      const btnText = document.getElementById("btn-register-text");
+
+      errorBox.classList.add("hidden");
+
+      if (!/^\d{6}$/.test(pin)) {
+        errorMsg.textContent = "PIN Rahasia KDKMP wajib tepat 6 digit angka.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+      if (pin !== pinConfirm) {
+        errorMsg.textContent = "Konfirmasi PIN tidak cocok dengan PIN Rahasia.";
+        errorBox.classList.remove("hidden");
+        return;
+      }
+
+      btn.disabled = true;
+      btnText.textContent = "Mengirim Pendaftaran...";
+
+      try {
+        const payload = {
+          action: "register_kdkmp",
+          Nama_KDKMP: namaKdkmp,
+          Wilayah: wilayah,
+          Kuota_Max_Bulan: kuotaMax,
+          Nama_PIC: namaPic,
+          No_WA: noWa,
+          PIN_KDKMP: pin,
+        };
+
+        const res = await fetch(appState.apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow",
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.status === "error" || json.success === false) {
+          throw new Error(json.message || "Gagal mendaftarkan unit KDKMP.");
+        }
+
+        const generatedCode =
+          json.Kode_KDKMP || json.kode_kdkmp || json.kode || (json.data && json.data.Kode_KDKMP) || "Menunggu Kode";
+
+        document.getElementById("reg-success-kode").textContent = generatedCode;
+        document.getElementById("reg-success-pin").textContent = pin;
+        document.getElementById("register-form").classList.add("hidden");
+        document.getElementById("register-success-panel").classList.remove("hidden");
+        showToast("Pendaftaran KDKMP terkirim, menunggu persetujuan Admin Pusat", "success");
+      } catch (err) {
+        errorMsg.textContent = err.message || "Terjadi kesalahan saat mendaftarkan KDKMP.";
+        errorBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btnText.textContent = "Ajukan Pendaftaran KDKMP";
+      }
+    }
+
+    function resetRegisterToLogin() {
+      document.getElementById("register-form").reset();
+      document.getElementById("reg-kuota").value = "5";
+      document.getElementById("register-form").classList.remove("hidden");
+      document.getElementById("register-success-panel").classList.add("hidden");
+      switchAuthTab("login");
+      loadActiveKdkmpList(false);
+    }
+
+    // =========================================================================
+    // 5. PANEL ADMIN PUSAT (VERIFIKASI & APPROVAL KDKMP)
+    // =========================================================================
+    function extractUnitArray(json) {
+      if (Array.isArray(json)) return json;
+      if (!json || typeof json !== "object") return [];
+
+      const candidateKeys = [
+        "kdkmp",
+        "data",
+        "units",
+        "list",
+        "koperasi",
+        "all_kdkmp",
+        "items",
+        "rows",
+        "records",
+        "result",
+      ];
+
+      for (const key of candidateKeys) {
+        if (Array.isArray(json[key])) return json[key];
+      }
+
+      if (json.data && typeof json.data === "object" && !Array.isArray(json.data)) {
+        for (const key of candidateKeys) {
+          if (Array.isArray(json.data[key])) return json.data[key];
+        }
+      }
+
+      // Cek jika response memisahkan per status (mis. { pending: [...], aktif: [...], ditolak: [...] })
+      const grouped = [];
+      ["pending", "aktif", "ditolak", "PENDING", "AKTIF", "DITOLAK"].forEach((k) => {
+        if (Array.isArray(json[k])) grouped.push(...json[k]);
+      });
+      if (grouped.length > 0) return grouped;
+
+      // Fallback terakhir: ambil properti array pertama yang ditemukan pada objek JSON
+      const anyArray = Object.values(json).find((v) => Array.isArray(v));
+      return Array.isArray(anyArray) ? anyArray : [];
+    }
+
+    function openAdminModal() {
+      const card = document.getElementById("modal-admin-card");
+      card.classList.remove("h-[88vh]", "sm:h-[640px]");
+      document.getElementById("modal-admin").classList.remove("hidden");
+      document.getElementById("admin-auth-step").classList.remove("hidden");
+      document.getElementById("admin-list-step").classList.add("hidden");
+      document.getElementById("admin-error-box").classList.add("hidden");
+      document.getElementById("admin-pin-input").value = "";
+      lucide.createIcons();
+    }
+
+    function closeAdminModal() {
+      document.getElementById("modal-admin").classList.add("hidden");
+      appState.adminPin = "";
+    }
+
+    async function handleAdminLogin(e) {
+      e.preventDefault();
+      const adminPin = document.getElementById("admin-pin-input").value.trim();
+      const errBox = document.getElementById("admin-error-box");
+      const btn = document.getElementById("btn-admin-login");
+
+      errBox.classList.add("hidden");
+      btn.disabled = true;
+      btn.textContent = "Memverifikasi...";
+
+      try {
+        const endpoint = buildGetUrl({ action: "admin_list", pin: adminPin });
+        const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.status === "error" || json.success === false) {
+          throw new Error(json.message || "PIN Admin Utama salah!");
+        }
+
+        appState.adminPin = adminPin;
+        const rawList = extractUnitArray(json);
+
+        appState.adminUnits = rawList.map(normalizeUnit).filter(Boolean);
+        const card = document.getElementById("modal-admin-card");
+        card.classList.add("h-[88vh]", "sm:h-[640px]");
+        document.getElementById("admin-auth-step").classList.add("hidden");
+        document.getElementById("admin-list-step").classList.remove("hidden");
+        appState.adminFilter = "ALL";
+        setAdminFilter("ALL");
+      } catch (err) {
+        errBox.textContent = err.message || "Gagal mengakses Admin Pusat.";
+        errBox.classList.remove("hidden");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Buka Panel Admin";
+      }
+    }
+
+    async function refreshAdminList() {
+      if (!appState.adminPin) return;
+      const icon = document.getElementById("admin-refresh-icon");
+      if (icon) icon.classList.add("animate-spin");
+      try {
+        const endpoint = buildGetUrl({ action: "admin_list", pin: appState.adminPin });
+        const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+        const json = await res.json();
+        if (json.status === "error" || json.success === false) {
+          throw new Error(json.message || "Gagal memuat data admin");
+        }
+
+        const rawList = extractUnitArray(json);
+        appState.adminUnits = rawList.map(normalizeUnit).filter(Boolean);
+        renderAdminUnits();
+        showToast(`Daftar unit Admin diperbarui (${appState.adminUnits.length} unit)`, "success");
+      } catch (err) {
+        showToast(`Gagal memuat ulang: ${err.message}`, "error");
+      } finally {
+        if (icon) icon.classList.remove("animate-spin");
+      }
+    }
+
+    function setAdminFilter(filter) {
+      appState.adminFilter = filter;
+      document.querySelectorAll(".admin-filter-btn").forEach((btn) => {
+        const active = btn.dataset.adminFilter === filter;
+        btn.className = active
+          ? "admin-filter-btn px-3 min-h-[36px] text-xs font-semibold rounded-lg bg-slate-900 text-white"
+          : "admin-filter-btn px-3 min-h-[36px] text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-700";
+      });
+      renderAdminUnits();
+    }
+
+    function renderAdminUnits() {
+      const container = document.getElementById("admin-units-container");
+      const summaryLine = document.getElementById("admin-summary-line");
+      const query = (document.getElementById("admin-search-input").value || "").toLowerCase().trim();
+
+      const total = appState.adminUnits.length;
+      const pendingCount = appState.adminUnits.filter((u) => u.Status === "PENDING").length;
+      const activeCount = appState.adminUnits.filter((u) => u.Status === "AKTIF").length;
+      const rejectedCount = appState.adminUnits.filter((u) => u.Status === "DITOLAK").length;
+      if (summaryLine) {
+        summaryLine.textContent = `Total ${total} unit · ${pendingCount} Pending · ${activeCount} Aktif · ${rejectedCount} Ditolak`;
+      }
+
+      const filtered = appState.adminUnits.filter((u) => {
+        if (appState.adminFilter !== "ALL" && u.Status !== appState.adminFilter) return false;
+        if (!query) return true;
+        return (
+          u.Nama_KDKMP.toLowerCase().includes(query) ||
+          u.Kode_KDKMP.toLowerCase().includes(query) ||
+          u.Wilayah.toLowerCase().includes(query) ||
+          u.Nama_PIC.toLowerCase().includes(query)
+        );
+      });
+
+      if (total === 0) {
+        container.innerHTML = `
+          <div class="py-12 px-4 text-center space-y-1.5">
+            <p class="text-sm font-semibold text-slate-800">Belum ada unit KDKMP terdaftar di Google Sheets</p>
+            <p class="text-xs text-slate-500">Unit yang didaftarkan melalui tab "Daftarkan KDKMP Baru" akan muncul di sini untuk disetujui.</p>
+          </div>
+        `;
+        return;
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="py-10 text-center text-xs text-slate-500">Tidak ada unit KDKMP yang cocok dengan filter atau pencarian saat ini.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered
+        .map((u) => {
+          const statusStyle =
+            u.Status === "AKTIF"
+              ? "text-emerald-700"
+              : u.Status === "DITOLAK"
+              ? "text-red-700"
+              : "text-amber-700";
+          return `
+            <div class="border border-slate-200 rounded-xl p-4 bg-white space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                    <span class="font-mono font-bold text-[#C8102E]">${escapeHtml(u.Kode_KDKMP)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span class="font-bold ${statusStyle}">${escapeHtml(u.Status)}</span>
+                    <span aria-hidden="true">·</span>
+                    <span class="tabular-nums">Kuota ${u.Kuota_Max_Bulan} pcs/KK</span>
+                  </div>
+                  <p class="text-sm font-bold text-slate-900 mt-0.5">${escapeHtml(u.Nama_KDKMP)}</p>
+                  <p class="text-xs text-slate-500">${escapeHtml(u.Wilayah)}</p>
+                </div>
+
+                <div class="text-xs sm:text-right space-y-0.5 shrink-0">
+                  <p class="font-semibold text-slate-800">PIC: ${escapeHtml(u.Nama_PIC)}</p>
+                  <p class="font-mono text-slate-600">WA: ${escapeHtml(u.No_WA)}</p>
+                  <p class="font-mono font-bold text-slate-900">PIN: ${escapeHtml(u.PIN_KDKMP || "-")}</p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                ${
+                  u.Status !== "AKTIF"
+                    ? `<button
+                        type="button"
+                        onclick="handleApproveKdkmp('${escapeHtml(u.Kode_KDKMP)}', 'AKTIF')"
+                        class="min-h-[38px] px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        Setujui (Aktifkan)
+                      </button>`
+                    : ""
+                }
+                ${
+                  u.Status !== "DITOLAK"
+                    ? `<button
+                        type="button"
+                        onclick="handleApproveKdkmp('${escapeHtml(u.Kode_KDKMP)}', 'DITOLAK')"
+                        class="min-h-[38px] px-3.5 bg-white hover:bg-red-50 border border-red-200 text-red-700 text-xs font-semibold rounded-lg transition-colors"
+                      >
+                        Tolak
+                      </button>`
+                    : ""
+                }
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+
+    async function handleApproveKdkmp(kodeKdkmp, newStatus) {
+      if (!appState.adminPin) return;
+      try {
+        const payload = {
+          action: "approve_kdkmp",
+          pin: appState.adminPin,
+          Kode_KDKMP: kodeKdkmp,
+          New_Status: newStatus,
+        };
+        const res = await fetch(appState.apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (json.status === "error") throw new Error(json.message || "Gagal memperbarui status");
+
+        showToast(`Status ${kodeKdkmp} diubah menjadi ${newStatus}`, "success");
+        await refreshAdminList();
+        await loadActiveKdkmpList(false);
+      } catch (err) {
+        showToast(`Gagal memperbarui status: ${err.message}`, "error");
+      }
+    }
+
+    // =========================================================================
+    // 6. SINKRONISASI TRANSAKSI TEROTENTIKASI (GET, POST, DELETE)
+    // =========================================================================
+    function extractTransactionArray(json) {
+      if (Array.isArray(json)) return json;
+      if (Array.isArray(json.data)) return json.data;
+      if (Array.isArray(json.transaksi)) return json.transaksi;
+      if (Array.isArray(json.transactions)) return json.transactions;
+      if (Array.isArray(json.rows)) return json.rows;
+      return [];
+    }
+
+    async function fetchAuthenticatedTransactions(showToastFeedback = false) {
+      if (!appState.session) return;
+
+      appState.isLoadingTx = true;
+      setLoadingState(true);
+      document.getElementById("sync-error-banner").classList.add("hidden");
+
+      try {
+        const endpoint = buildGetUrl({
+          action: "get_transactions",
+          kdkmp: appState.session.Kode_KDKMP,
+          pin: appState.session.PIN_KDKMP,
+        });
+        const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.status === "error" || json.success === false) {
+          // Jika PIN tidak lagi valid, keluarkan sesi demi keamanan isolasi
+          showToast(json.message || "Sesi PIN tidak valid, silakan masuk kembali.", "error");
+          logoutKdkmp();
+          return;
+        }
+
+        const updatedInfo = normalizeUnit(json.kdkmp_info || json.kdkmp || json.unit);
+        if (updatedInfo) {
+          appState.session.kdkmp_info = updatedInfo;
+          localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(appState.session));
+          showDashboardView();
+        }
+
+        const rawTx = extractTransactionArray(json);
+        appState.transactions = rawTx.map((row, idx) => normalizeTransaction(row, idx)).filter(Boolean);
+
+        if (showToastFeedback) {
+          showToast(`Data tersinkronisasi (${appState.transactions.length} transaksi)`, "success");
+        }
+      } catch (err) {
+        document.getElementById("sync-error-detail").textContent =
+          `Error: ${err.message}. Pastikan koneksi internet stabil dan URL Apps Script benar.`;
+        document.getElementById("sync-error-banner").classList.remove("hidden");
+      } finally {
+        appState.isLoadingTx = false;
+        setLoadingState(false);
+        renderSummaryAndData();
+      }
+    }
+
+    function setLoadingState(loading) {
+      const loadingEl = document.getElementById("data-loading");
+      const refreshIcon = document.getElementById("refresh-icon");
+      if (loading) {
+        loadingEl.classList.remove("hidden");
+        document.getElementById("data-empty").classList.add("hidden");
+        document.getElementById("mobile-data-list").innerHTML = "";
+        document.getElementById("desktop-table-body").innerHTML = "";
+        if (refreshIcon) refreshIcon.classList.add("animate-spin");
+      } else {
+        loadingEl.classList.add("hidden");
+        if (refreshIcon) refreshIcon.classList.remove("animate-spin");
+      }
+    }
+
+    // =========================================================================
+    // 7. PENGECEKAN KUOTA LINTAS KOPERASI (PRIVACY-PRESERVING) & AUTOFILL
+    // =========================================================================
+    function handleNoKKInput(el) {
+      const digits = el.value.replace(/\D/g, "").slice(0, 16);
+      el.value = digits;
+      triggerQuotaCheckDebounced();
+    }
+
+    function clearKKInput() {
+      const input = document.getElementById("input-no-kk");
+      input.value = "";
+      document.getElementById("autofill-badge").classList.add("hidden");
+      resetQuotaStatusUI();
+      input.focus();
+    }
+
+    function handlePeriodChange() {
+      const val = document.getElementById("period-select").value;
+      if (!val) return;
+      appState.selectedPeriod = val;
+      renderSummaryAndData();
+
+      const noKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
+      if (noKK.length === 16) {
+        checkGlobalQuota(noKK);
+      }
+    }
+
+    function triggerQuotaCheckDebounced() {
+      clearTimeout(appState.quotaDebounceTimer);
+      const digits = document.getElementById("input-no-kk").value.replace(/\D/g, "");
+      document.getElementById("kk-digit-counter").textContent = `${digits.length}/16 digit`;
+
+      if (digits.length > 0) {
+        document.getElementById("btn-clear-kk").classList.remove("hidden");
+      } else {
+        document.getElementById("btn-clear-kk").classList.add("hidden");
+      }
+
+      if (digits.length < 16) {
+        resetQuotaStatusUI(digits.length);
+        return;
+      }
+
+      appState.quotaDebounceTimer = setTimeout(() => {
+        checkGlobalQuota(digits);
+      }, 220);
+    }
+
+    function resetQuotaStatusUI(digitCount = 0) {
+      const maxKuota = appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5;
+      appState.quotaState = {
+        checked: false,
+        noKK: "",
+        maxKuota,
+        terpakaiGlobal: 0,
+        sisaGlobal: maxKuota,
+        error: null,
+      };
+
+      const counter = document.getElementById("kk-digit-counter");
+      const clearBtn = document.getElementById("btn-clear-kk");
+      const box = document.getElementById("quota-status-box");
+      const icon = document.getElementById("quota-status-icon");
+      const title = document.getElementById("quota-status-title");
+      const desc = document.getElementById("quota-status-desc");
+      const submitBtn = document.getElementById("btn-submit-tx");
+
+      counter.textContent = `${digitCount}/16 digit`;
+      if (digitCount > 0) clearBtn.classList.remove("hidden");
+      else clearBtn.classList.add("hidden");
+
+      document.getElementById("autofill-badge").classList.add("hidden");
+      box.className = "mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-start gap-2.5";
+      icon.setAttribute("data-lucide", "info");
+      icon.className = "w-4 h-4 text-slate-500 shrink-0 mt-0.5";
+      title.className = "text-xs font-semibold text-slate-700";
+      title.textContent = digitCount === 0 ? "Menunggu Nomor KK (16 digit)" : `Kurang ${16 - digitCount} digit lagi`;
+      desc.className = "text-xs text-slate-500 mt-0.5 tabular-nums";
+      desc.textContent = "Masukkan 16 digit No. KK atau gunakan tombol Scan KK.";
+      submitBtn.disabled = true;
+
+      renderQuickQtyButtons();
+      updateQuantityPreview();
+      lucide.createIcons();
+    }
+
+    async function checkGlobalQuota(noKK) {
+      if (!noKK || noKK.length !== 16) return;
+
+      const box = document.getElementById("quota-status-box");
+      const icon = document.getElementById("quota-status-icon");
+      const title = document.getElementById("quota-status-title");
+      const desc = document.getElementById("quota-status-desc");
+      const submitBtn = document.getElementById("btn-submit-tx");
+      const autofillBadge = document.getElementById("autofill-badge");
+
+      appState.isCheckingQuota = true;
+      submitBtn.disabled = true;
+
+      box.className = "mt-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 flex items-start gap-2.5";
+      icon.setAttribute("data-lucide", "loader-2");
+      icon.className = "w-4 h-4 text-[#C8102E] shrink-0 mt-0.5 animate-spin";
+      title.className = "text-xs font-semibold text-slate-800";
+      title.textContent = "Memeriksa kuota lintas KDKMP...";
+      desc.className = "text-xs text-slate-500 mt-0.5";
+      desc.textContent = `Mengecek total pembelian KK ini untuk periode ${appState.selectedPeriod}.`;
+      lucide.createIcons();
+
+      try {
+        const endpoint = buildGetUrl({
+          action: "check_quota",
+          nokk: noKK,
+          bulan: appState.selectedPeriod,
+        });
+        const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        // Pastikan input No. KK tidak berubah selama request berlangsung
+        const currentInputKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
+        if (currentInputKK !== noKK) return;
+
+        if (json.status === "error" || json.success === false) {
+          throw new Error(json.message || "Gagal memeriksa kuota di server");
+        }
+
+        const unitMax = appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5;
+        const maxKuota = Math.max(1, parseInt(json.kuota_max ?? json.Kuota_Max ?? unitMax, 10) || unitMax);
+        const terpakaiGlobal = Math.max(
+          0,
+          parseInt(
+            json.total_beli ?? json.terpakai ?? json.used ?? json.total ?? json.jumlah_terpakai ?? 0,
+            10
+          ) || 0
+        );
+        const sisaGlobal =
+          json.sisa !== undefined && json.sisa !== null
+            ? Math.max(0, parseInt(json.sisa, 10) || 0)
+            : Math.max(0, maxKuota - terpakaiGlobal);
+
+        // Autofill Nama & RT/RW dari respons check_quota (tanpa membocorkan koperasi asal) atau riwayat lokal KDKMP sendiri
+        const serverNama = String(json.nama ?? json.Nama_Kepala_Keluarga ?? json.nama_kepala_keluarga ?? "").trim();
+        const serverRtRw = String(json.rt_rw ?? json.RT_RW ?? json.rtRw ?? "").trim();
+        const localHist = appState.transactions.find((t) => t.noKK === noKK);
+
+        const resolvedNama = serverNama || (localHist && localHist.nama !== "Tanpa Nama" ? localHist.nama : "");
+        const resolvedRtRw = serverRtRw || (localHist && localHist.rtRw !== "-" ? localHist.rtRw : "");
+
+        if (resolvedNama) document.getElementById("input-nama").value = resolvedNama;
+        if (resolvedRtRw) document.getElementById("input-rtrw").value = resolvedRtRw;
+        if (resolvedNama || resolvedRtRw) {
+          autofillBadge.classList.remove("hidden");
+        } else {
+          autofillBadge.classList.add("hidden");
+        }
+
+        appState.quotaState = {
+          checked: true,
+          noKK,
+          maxKuota,
+          terpakaiGlobal,
+          sisaGlobal,
+          error: null,
+        };
+
+        if (sisaGlobal <= 0) {
+          // MERAH: Kuota Habis
+          box.className = "mt-2.5 rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2.5";
+          icon.setAttribute("data-lucide", "x-circle");
+          icon.className = "w-4 h-4 text-red-600 shrink-0 mt-0.5";
+          title.className = "text-xs font-bold text-red-800";
+          title.textContent = "Kuota Bulan Ini Habis (Diblokir)";
+          desc.className = "text-xs text-red-700 mt-0.5 tabular-nums";
+          desc.textContent = `Total pembelian lintas KDKMP sudah ${terpakaiGlobal} dari batas maksimal ${maxKuota} pcs (${maxKuota * 5} kg).`;
+          submitBtn.disabled = true;
+        } else if (terpakaiGlobal > 0) {
+          // KUNING: Tersisa Sebagian
+          box.className = "mt-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-2.5";
+          icon.setAttribute("data-lucide", "alert-triangle");
+          icon.className = "w-4 h-4 text-amber-600 shrink-0 mt-0.5";
+          title.className = "text-xs font-bold text-amber-900";
+          title.textContent = `Kuota Tersisa Sebagian (${sisaGlobal} pcs lagi)`;
+          desc.className = "text-xs text-amber-800 mt-0.5 tabular-nums";
+          desc.textContent = `Sudah tercatat ${terpakaiGlobal} dari ${maxKuota} pcs bulan ini · Maksimal beli sekarang ${sisaGlobal} pcs (${sisaGlobal * 5} kg).`;
+          submitBtn.disabled = appState.isSubmitting;
+        } else {
+          // HIJAU: Kuota Penuh Tersedia
+          box.className = "mt-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-2.5";
+          icon.setAttribute("data-lucide", "check-circle-2");
+          icon.className = "w-4 h-4 text-emerald-600 shrink-0 mt-0.5";
+          title.className = "text-xs font-bold text-emerald-900";
+          title.textContent = `Kuota Penuh Tersedia (${sisaGlobal} pcs)`;
+          desc.className = "text-xs text-emerald-800 mt-0.5 tabular-nums";
+          desc.textContent = `Belum ada pembelian di seluruh KDKMP pada periode ${appState.selectedPeriod} · Maksimal ${maxKuota} pcs (${maxKuota * 5} kg).`;
+          submitBtn.disabled = appState.isSubmitting;
+        }
+
+        const qtyInput = document.getElementById("input-jumlah");
+        const curQty = parseInt(qtyInput.value, 10) || 1;
+        if (sisaGlobal > 0 && curQty > sisaGlobal) {
+          qtyInput.value = String(sisaGlobal);
+        }
+      } catch (err) {
+        appState.quotaState = {
+          checked: false,
+          noKK,
+          maxKuota: appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5,
+          terpakaiGlobal: 0,
+          sisaGlobal: 0,
+          error: err.message,
+        };
+        box.className = "mt-2.5 rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2.5";
+        icon.setAttribute("data-lucide", "wifi-off");
+        icon.className = "w-4 h-4 text-red-600 shrink-0 mt-0.5";
+        title.className = "text-xs font-bold text-red-800";
+        title.textContent = "Gagal Memeriksa Kuota Server";
+        desc.className = "text-xs text-red-700 mt-0.5";
+        desc.textContent = `${err.message}. Ketuk ulang atau sinkronkan koneksi sebelum menyimpan.`;
+        submitBtn.disabled = true;
+      } finally {
+        appState.isCheckingQuota = false;
+        renderQuickQtyButtons();
+        updateQuantityPreview();
+        lucide.createIcons();
+      }
+    }
+
+    function renderQuickQtyButtons() {
+      const container = document.getElementById("qty-quick-buttons");
+      const maxKuota = appState.quotaState.checked
+        ? appState.quotaState.maxKuota
+        : appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5;
+      const sisa = appState.quotaState.checked ? appState.quotaState.sisaGlobal : maxKuota;
+      const currentQty = parseInt(document.getElementById("input-jumlah").value, 10) || 1;
+
+      const btnCount = Math.min(maxKuota, 5);
+      let html = "";
+      for (let i = 1; i <= btnCount; i++) {
+        const disabled = i > sisa;
+        const active = !disabled && currentQty === i;
+        html += `
+          <button
+            type="button"
+            onclick="setQuantity(${i})"
+            ${disabled ? "disabled" : ""}
+            class="min-h-[42px] rounded-xl text-xs font-bold font-mono tabular-nums border transition-colors ${
+              disabled
+                ? "bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed"
+                : active
+                ? "bg-[#C8102E] border-[#C8102E] text-white"
+                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+            }"
+          >
+            ${i} pcs
+          </button>
+        `;
+      }
+      container.innerHTML = html;
+    }
+
+    function setQuantity(val) {
+      document.getElementById("input-jumlah").value = String(val);
+      handleQuantityInput();
+    }
+
+    function adjustQuantity(delta) {
+      const qtyInput = document.getElementById("input-jumlah");
+      const maxAllowed = appState.quotaState.checked
+        ? Math.max(1, appState.quotaState.sisaGlobal)
+        : appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5;
+      const next = Math.min(maxAllowed, Math.max(1, (parseInt(qtyInput.value, 10) || 1) + delta));
+      qtyInput.value = String(next);
+      handleQuantityInput();
+    }
+
+    function handleQuantityInput() {
+      updateQuantityPreview();
+      renderQuickQtyButtons();
+    }
+
+    function updateQuantityPreview() {
+      const qty = Math.max(0, parseInt(document.getElementById("input-jumlah").value, 10) || 0);
+      document.getElementById("jumlah-kg-preview").textContent = `= ${qty * 5} kg Beras SPHP`;
+
+      const submitBtn = document.getElementById("btn-submit-tx");
+      if (!appState.quotaState.checked || appState.isCheckingQuota || appState.isSubmitting) {
+        submitBtn.disabled = true;
+      } else {
+        const sisa = appState.quotaState.sisaGlobal;
+        submitBtn.disabled = sisa <= 0 || qty < 1 || qty > sisa;
+      }
+    }
+
+    // =========================================================================
+    // 8. SIMPAN & HAPUS TRANSAKSI TEROTENTIKASI
+    // =========================================================================
+    async function handleSaveTransaction(e) {
+      e.preventDefault();
+      if (!appState.session) return;
+
+      const noKK = document.getElementById("input-no-kk").value.replace(/\D/g, "");
+      const nama = document.getElementById("input-nama").value.trim();
+      const rtRw = document.getElementById("input-rtrw").value.trim();
+      const jumlah = parseInt(document.getElementById("input-jumlah").value, 10) || 0;
+
+      if (noKK.length !== 16 || !appState.quotaState.checked || appState.quotaState.noKK !== noKK) {
+        showToast("Pastikan 16 digit No. KK sudah dicek kuotanya", "error");
+        return;
+      }
+      if (jumlah < 1 || jumlah > appState.quotaState.sisaGlobal) {
+        showToast(`Jumlah beli melebihi sisa kuota (${appState.quotaState.sisaGlobal} pcs)`, "error");
+        return;
+      }
+
+      const payload = {
+        Kode_KDKMP: appState.session.Kode_KDKMP,
+        PIN_KDKMP: appState.session.PIN_KDKMP,
+        Bulan_Periode: appState.selectedPeriod,
+        Kuota_Max: appState.session.kdkmp_info?.Kuota_Max_Bulan || 5,
+        No_KK: noKK,
+        Nama_Kepala_Keluarga: nama,
+        RT_RW: rtRw,
+        Jumlah_Beli: jumlah,
+      };
+
+      setSubmitLoading(true);
+
+      try {
+        const res = await fetch(appState.apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        let json = null;
+        try {
+          json = await res.json();
+        } catch (parseErr) {}
+
+        if (json && (json.status === "error" || json.success === false)) {
+          throw new Error(json.message || "Transaksi ditolak oleh server");
+        }
+
+        document.getElementById("transaction-form").reset();
+        document.getElementById("input-jumlah").value = "1";
+        resetQuotaStatusUI(0);
+        showToast(`Tersimpan: ${nama} (${jumlah} pcs / ${jumlah * 5} kg)`, "success");
+
+        await fetchAuthenticatedTransactions(false);
+      } catch (err) {
+        showToast(`Gagal menyimpan transaksi: ${err.message}`, "error");
+      } finally {
+        setSubmitLoading(false);
+      }
+    }
+
+    function setSubmitLoading(isLoading) {
+      appState.isSubmitting = isLoading;
+      const btn = document.getElementById("btn-submit-tx");
+      const text = document.getElementById("btn-submit-text");
+      if (isLoading) {
+        btn.disabled = true;
+        text.textContent = "Menyimpan ke Google Sheets...";
+      } else {
+        text.textContent = "Simpan Transaksi";
+        updateQuantityPreview();
+      }
+    }
+
+    function openDeleteModal(clientKey) {
+      const tx = appState.transactions.find((t) => t.clientKey === clientKey);
+      if (!tx) return;
+      appState.pendingDeleteTx = tx;
+      document.getElementById("delete-confirm-detail").textContent =
+        `Hapus transaksi milik ${tx.nama} (${tx.noKK}) sebanyak ${tx.jumlah} pcs (${tx.jumlah * 5} kg) pada periode ${tx.bulanPeriode}?`;
+      document.getElementById("modal-delete-confirm").classList.remove("hidden");
+    }
+
+    function closeDeleteModal() {
+      appState.pendingDeleteTx = null;
+      document.getElementById("modal-delete-confirm").classList.add("hidden");
+    }
+
+    async function executeDeleteTransaction() {
+      const tx = appState.pendingDeleteTx;
+      if (!tx || !appState.session) return;
+
+      const btn = document.getElementById("btn-confirm-delete");
+      btn.disabled = true;
+      btn.textContent = "Menghapus...";
+
+      try {
+        const payload = {
+          action: "delete",
+          Kode_KDKMP: appState.session.Kode_KDKMP,
+          PIN_KDKMP: appState.session.PIN_KDKMP,
+          id: tx.id,
+          row: tx.row,
+          Timestamp: tx.timestamp,
+          Bulan_Periode: tx.bulanPeriode,
+          No_KK: tx.noKK,
+          Jumlah_Beli: tx.jumlah,
+        };
+
+        const res = await fetch(appState.apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+
+        if (json.status === "error" || json.success === false) {
+          throw new Error(json.message || "Gagal menghapus transaksi");
+        }
+
+        closeDeleteModal();
+        showToast("Transaksi berhasil dihapus", "success");
+        await fetchAuthenticatedTransactions(false);
+      } catch (err) {
+        showToast(`Gagal menghapus: ${err.message}`, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Ya, Hapus Transaksi";
+      }
+    }
+
+    // =========================================================================
+    // 9. RINGKASAN, TAB RIWAYAT & REKAP PER KK, PENCARIAN & EXPORT CSV
+    // =========================================================================
+    function getPeriodTransactions() {
+      return appState.transactions.filter((tx) => tx.bulanPeriode === appState.selectedPeriod);
+    }
+
+    function buildRecapPerKK(periodTx) {
+      const maxKuota = appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5;
+      const map = new Map();
+
+      periodTx.forEach((tx) => {
+        if (!map.has(tx.noKK)) {
+          map.set(tx.noKK, {
+            noKK: tx.noKK,
+            nama: tx.nama,
+            rtRw: tx.rtRw,
+            terpakai: 0,
+            transaksiCount: 0,
+          });
+        }
+        const entry = map.get(tx.noKK);
+        entry.terpakai += tx.jumlah;
+        entry.transaksiCount += 1;
+        if (tx.nama && tx.nama !== "Tanpa Nama") entry.nama = tx.nama;
+        if (tx.rtRw && tx.rtRw !== "-") entry.rtRw = tx.rtRw;
+      });
+
+      return Array.from(map.values())
+        .map((item) => {
+          const sisa = Math.max(0, maxKuota - item.terpakai);
+          return { ...item, maxKuota, sisa };
+        })
+        .sort((a, b) => b.terpakai - a.terpakai);
+    }
+
+    function renderSummaryAndData() {
+      const periodTx = getPeriodTransactions();
+      const recapList = buildRecapPerKK(periodTx);
+
+      const totalTx = periodTx.length;
+      const totalPcs = periodTx.reduce((sum, tx) => sum + tx.jumlah, 0);
+      const totalKg = totalPcs * 5;
+      const totalKK = recapList.length;
+      const exhaustedKK = recapList.filter((r) => r.sisa === 0).length;
+
+      document.getElementById("stat-total-tx").textContent = totalTx.toLocaleString("id-ID");
+      document.getElementById("stat-period-label").textContent = `Periode ${formatPeriodLabel(appState.selectedPeriod)}`;
+      document.getElementById("stat-total-pcs").textContent = totalPcs.toLocaleString("id-ID");
+      document.getElementById("stat-total-kg").textContent = `${totalKg.toLocaleString("id-ID")} kg Beras SPHP`;
+      document.getElementById("stat-total-kk").textContent = totalKK.toLocaleString("id-ID");
+      document.getElementById("stat-kk-exhausted").textContent = `${exhaustedKK} KK mencapai batas unit`;
+
+      renderDataView();
+    }
+
+    function switchTab(tab) {
+      appState.activeTab = tab;
+      const histBtn = document.getElementById("tab-btn-history");
+      const recapBtn = document.getElementById("tab-btn-recap");
+      const filterBar = document.getElementById("recap-filter-bar");
+
+      if (tab === "history") {
+        histBtn.className = "px-3.5 min-h-[40px] text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 bg-white text-slate-900 shadow-xs";
+        recapBtn.className = "px-3.5 min-h-[40px] text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 text-slate-600 hover:text-slate-900";
+        filterBar.classList.add("hidden");
+      } else {
+        recapBtn.className = "px-3.5 min-h-[40px] text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 bg-white text-slate-900 shadow-xs";
+        histBtn.className = "px-3.5 min-h-[40px] text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 text-slate-600 hover:text-slate-900";
+        filterBar.classList.remove("hidden");
+      }
+      renderDataView();
+    }
+
+    function setRecapFilter(filter) {
+      appState.recapFilter = filter;
+      document.querySelectorAll(".recap-filter-btn").forEach((btn) => {
+        const active = btn.dataset.recapFilter === filter;
+        btn.className = active
+          ? "recap-filter-btn px-3 min-h-[34px] text-xs font-semibold rounded-lg bg-slate-900 text-white transition-colors"
+          : "recap-filter-btn px-3 min-h-[34px] text-xs font-medium rounded-lg bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors";
+      });
+      renderDataView();
+    }
+
+    function renderDataView() {
+      if (appState.isLoadingTx) return;
+
+      const query = (document.getElementById("search-input").value || "").toLowerCase().trim();
+      const periodTx = getPeriodTransactions();
+      const emptyEl = document.getElementById("data-empty");
+      const mobileList = document.getElementById("mobile-data-list");
+      const tableHead = document.getElementById("desktop-table-head");
+      const tableBody = document.getElementById("desktop-table-body");
+
+      if (appState.activeTab === "history") {
+        const filtered = periodTx
+          .filter((tx) => {
+            if (!query) return true;
+            return (
+              tx.noKK.toLowerCase().includes(query) ||
+              tx.nama.toLowerCase().includes(query) ||
+              tx.rtRw.toLowerCase().includes(query)
+            );
+          })
+          .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+        if (filtered.length === 0) {
+          emptyEl.classList.remove("hidden");
+          mobileList.innerHTML = "";
+          tableHead.innerHTML = "";
+          tableBody.innerHTML = "";
+          return;
+        }
+        emptyEl.classList.add("hidden");
+
+        mobileList.innerHTML = filtered
+          .map(
+            (tx) => `
+            <div class="p-4 flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(tx.nama)}</p>
+                <p class="text-xs font-mono text-slate-600 mt-0.5 tabular-nums">${escapeHtml(tx.noKK)}</p>
+                <p class="text-xs text-slate-500 mt-1">RT/RW ${escapeHtml(tx.rtRw)} · ${formatShortDate(tx.timestamp)}</p>
+              </div>
+              <div class="text-right shrink-0 flex flex-col items-end gap-1.5">
+                <div>
+                  <p class="text-sm font-bold text-[#C8102E] tabular-nums">${tx.jumlah} pcs</p>
+                  <p class="text-xs text-slate-500 tabular-nums">${tx.jumlah * 5} kg</p>
+                </div>
+                <button
+                  type="button"
+                  onclick="openDeleteModal('${escapeHtml(tx.clientKey)}')"
+                  class="px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                >
+                  Hapus
+                </button>
+              </div>
+            </div>
+          `
+          )
+          .join("");
+
+        tableHead.innerHTML = `
+          <tr>
+            <th class="py-3 px-4">Waktu</th>
+            <th class="py-3 px-4">No. KK</th>
+            <th class="py-3 px-4">Kepala Keluarga</th>
+            <th class="py-3 px-4">RT/RW</th>
+            <th class="py-3 px-4 text-right">Jumlah</th>
+            <th class="py-3 px-4 text-right">Aksi</th>
+          </tr>
+        `;
+        tableBody.innerHTML = filtered
+          .map(
+            (tx) => `
+            <tr class="hover:bg-slate-50/80 transition-colors">
+              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap tabular-nums">${formatShortDate(tx.timestamp)}</td>
+              <td class="py-3 px-4 font-mono text-xs text-slate-700 whitespace-nowrap tabular-nums">${escapeHtml(tx.noKK)}</td>
+              <td class="py-3 px-4 font-semibold text-slate-900">${escapeHtml(tx.nama)}</td>
+              <td class="py-3 px-4 font-mono text-xs text-slate-600 whitespace-nowrap">${escapeHtml(tx.rtRw)}</td>
+              <td class="py-3 px-4 text-right whitespace-nowrap tabular-nums">
+                <span class="font-bold text-[#C8102E]">${tx.jumlah} pcs</span>
+                <span class="text-xs text-slate-500 ml-1">(${tx.jumlah * 5} kg)</span>
+              </td>
+              <td class="py-3 px-4 text-right whitespace-nowrap">
+                <button
+                  type="button"
+                  onclick="openDeleteModal('${escapeHtml(tx.clientKey)}')"
+                  class="px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  Hapus
+                </button>
+              </td>
+            </tr>
+          `
+          )
+          .join("");
+      } else {
+        let recap = buildRecapPerKK(periodTx).filter((r) => {
+          if (!query) return true;
+          return (
+            r.noKK.toLowerCase().includes(query) ||
+            r.nama.toLowerCase().includes(query) ||
+            r.rtRw.toLowerCase().includes(query)
+          );
+        });
+
+        if (appState.recapFilter === "available") {
+          recap = recap.filter((r) => r.sisa > 0);
+        } else if (appState.recapFilter === "exhausted") {
+          recap = recap.filter((r) => r.sisa === 0);
+        }
+
+        document.getElementById("data-count-label").textContent = `${recap.length} KK`;
+
+        if (recap.length === 0) {
+          emptyEl.classList.remove("hidden");
+          mobileList.innerHTML = "";
+          tableHead.innerHTML = "";
+          tableBody.innerHTML = "";
+          return;
+        }
+        emptyEl.classList.add("hidden");
+
+        mobileList.innerHTML = recap
+          .map((r) => {
+            const pct = Math.min(100, Math.round((r.terpakai / r.maxKuota) * 100));
+            const statusText = r.sisa === 0 ? "Batas Unit Tercapai" : `Sisa Unit ${r.sisa} pcs`;
+            const statusColor = r.sisa === 0 ? "text-red-700" : "text-amber-700";
+            const barColor = r.sisa === 0 ? "bg-red-600" : "bg-amber-500";
+            return `
+              <div class="p-4 space-y-2 cursor-pointer" onclick="prefillKKFromRecap('${escapeHtml(r.noKK)}')">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(r.nama)}</p>
+                    <p class="text-xs font-mono text-slate-600 tabular-nums">${escapeHtml(r.noKK)} · RT/RW ${escapeHtml(r.rtRw)}</p>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <p class="text-xs font-bold ${statusColor} tabular-nums">${statusText}</p>
+                    <p class="text-xs text-slate-500 tabular-nums">${r.terpakai}/${r.maxKuota} pcs (${r.terpakai * 5} kg)</p>
+                  </div>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                  <div class="h-full ${barColor}" style="width: ${pct}%"></div>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        tableHead.innerHTML = `
+          <tr>
+            <th class="py-3 px-4">No. KK</th>
+            <th class="py-3 px-4">Kepala Keluarga</th>
+            <th class="py-3 px-4">RT/RW</th>
+            <th class="py-3 px-4 text-right">Terpakai di Unit</th>
+            <th class="py-3 px-4 text-right">Sisa Batas Unit</th>
+          </tr>
+        `;
+        tableBody.innerHTML = recap
+          .map((r) => {
+            const statusColor = r.sisa === 0 ? "text-red-700 font-bold" : "text-emerald-700 font-semibold";
+            return `
+              <tr onclick="prefillKKFromRecap('${escapeHtml(r.noKK)}')" class="hover:bg-slate-50/80 transition-colors cursor-pointer" title="Klik untuk cek kuota global KK ini">
+                <td class="py-3 px-4 font-mono text-xs text-slate-700 whitespace-nowrap tabular-nums">${escapeHtml(r.noKK)}</td>
+                <td class="py-3 px-4 font-semibold text-slate-900">${escapeHtml(r.nama)}</td>
+                <td class="py-3 px-4 font-mono text-xs text-slate-600 whitespace-nowrap">${escapeHtml(r.rtRw)}</td>
+                <td class="py-3 px-4 text-right whitespace-nowrap tabular-nums">
+                  <span class="font-bold text-slate-900">${r.terpakai}/${r.maxKuota} pcs</span>
+                  <span class="text-xs text-slate-500 ml-1">(${r.terpakai * 5} kg)</span>
+                </td>
+                <td class="py-3 px-4 text-right whitespace-nowrap tabular-nums text-xs ${statusColor}">
+                  ${r.sisa === 0 ? "Habis (0 pcs)" : `${r.sisa} pcs (${r.sisa * 5} kg)`}
+                </td>
+              </tr>
+            `;
+          })
+          .join("");
+      }
+    }
+
+    function prefillKKFromRecap(noKK) {
+      const input = document.getElementById("input-no-kk");
+      input.value = noKK;
+      document.getElementById("kk-digit-counter").textContent = `${noKK.length}/16 digit`;
+      document.getElementById("btn-clear-kk").classList.remove("hidden");
+      checkGlobalQuota(noKK);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function exportCSV() {
+      if (!appState.session) return;
+      const periodTx = getPeriodTransactions();
+      if (periodTx.length === 0) {
+        showToast("Tidak ada data transaksi pada periode ini untuk diekspor", "error");
+        return;
+      }
+
+      const info = appState.session.kdkmp_info;
+      const safeUnitName = (info?.Nama_KDKMP || appState.session.Kode_KDKMP)
+        .replace(/[^a-zA-Z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-");
+      const filename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.csv`;
+
+      const isRecap = appState.activeTab === "recap";
+      const csvRows = [];
+
+      if (isRecap) {
+        csvRows.push([
+          "Kode_KDKMP",
+          "Nama_KDKMP",
+          "Bulan_Periode",
+          "No_KK",
+          "Nama_Kepala_Keluarga",
+          "RT_RW",
+          "Terpakai_Pcs",
+          "Terpakai_Kg",
+          "Kuota_Max_Pcs",
+          "Sisa_Unit_Pcs",
+        ]);
+        buildRecapPerKK(periodTx).forEach((r) => {
+          csvRows.push([
+            appState.session.Kode_KDKMP,
+            info?.Nama_KDKMP || appState.session.Kode_KDKMP,
+            appState.selectedPeriod,
+            `'${r.noKK}`,
+            r.nama,
+            r.rtRw,
+            r.terpakai,
+            r.terpakai * 5,
+            r.maxKuota,
+            r.sisa,
+          ]);
+        });
+      } else {
+        csvRows.push([
+          "Timestamp",
+          "Bulan_Periode",
+          "Kode_KDKMP",
+          "Nama_KDKMP",
+          "No_KK",
+          "Nama_Kepala_Keluarga",
+          "RT_RW",
+          "Jumlah_Pcs",
+          "Jumlah_Kg",
+        ]);
+        periodTx.forEach((tx) => {
+          csvRows.push([
+            tx.timestamp || "",
+            tx.bulanPeriode,
+            appState.session.Kode_KDKMP,
+            info?.Nama_KDKMP || appState.session.Kode_KDKMP,
+            `'${tx.noKK}`,
+            tx.nama,
+            tx.rtRw,
+            tx.jumlah,
+            tx.jumlah * 5,
+          ]);
+        });
+      }
+
+      const csvContent =
+        "\uFEFF" +
+        csvRows
+          .map((row) => row.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
+          .join("\n");
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+
+      showToast(`File ${filename} berhasil diunduh`, "success");
+    }
+
+    // =========================================================================
+    // 10. PEMINDAI KAMERA OCR NOMOR KK (TESSERACT.JS v5)
+    // =========================================================================
+    async function openScannerModal() {
+      const modal = document.getElementById("modal-scanner");
+      const video = document.getElementById("ocr-video");
+      const canvas = document.getElementById("ocr-canvas");
+      const viewfinder = document.getElementById("ocr-viewfinder");
+      const fallback = document.getElementById("ocr-camera-fallback");
+      const resultBox = document.getElementById("ocr-result-box");
+      const progressWrap = document.getElementById("ocr-progress-wrap");
+
+      modal.classList.remove("hidden");
+      video.classList.remove("hidden");
+      canvas.classList.add("hidden");
+      viewfinder.classList.remove("hidden");
+      fallback.classList.add("hidden");
+      resultBox.classList.add("hidden");
+      progressWrap.classList.add("hidden");
+      document.getElementById("btn-capture-ocr").disabled = false;
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        fallback.classList.remove("hidden");
+        viewfinder.classList.add("hidden");
+        document.getElementById("btn-capture-ocr").disabled = true;
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        appState.cameraStream = stream;
+        video.srcObject = stream;
+        await video.play();
+      } catch (err) {
+        fallback.classList.remove("hidden");
+        viewfinder.classList.add("hidden");
+        document.getElementById("btn-capture-ocr").disabled = true;
+        document.getElementById("ocr-camera-error-msg").textContent =
+          `Kamera tidak tersedia (${err.message}). Silakan gunakan tombol Unggah Foto KK.`;
+      }
+    }
+
+    function stopCameraStream() {
+      if (appState.cameraStream) {
+        appState.cameraStream.getTracks().forEach((track) => track.stop());
+        appState.cameraStream = null;
+      }
+      const video = document.getElementById("ocr-video");
+      if (video) video.srcObject = null;
+    }
+
+    function closeScannerModal() {
+      stopCameraStream();
+      document.getElementById("ocr-file-input").value = "";
+      document.getElementById("modal-scanner").classList.add("hidden");
+    }
+
+    async function captureAndScan() {
+      const video = document.getElementById("ocr-video");
+      const canvas = document.getElementById("ocr-canvas");
+      if (!video.videoWidth || !video.videoHeight) {
+        showToast("Kamera belum siap, coba beberapa saat lagi", "error");
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      video.classList.add("hidden");
+      document.getElementById("ocr-viewfinder").classList.add("hidden");
+      canvas.classList.remove("hidden");
+
+      await runOcrOnCanvas(canvas);
+    }
+
+    function handleFileScan(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      stopCameraStream();
+      const video = document.getElementById("ocr-video");
+      const canvas = document.getElementById("ocr-canvas");
+      const fallback = document.getElementById("ocr-camera-fallback");
+      const viewfinder = document.getElementById("ocr-viewfinder");
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = async () => {
+          const maxDim = 1600;
+          let w = img.width;
+          let h = img.height;
+          if (w > maxDim || h > maxDim) {
+            const ratio = Math.min(maxDim / w, maxDim / h);
+            w = Math.round(w * ratio);
+            h = Math.round(h * ratio);
+          }
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+
+          video.classList.add("hidden");
+          fallback.classList.add("hidden");
+          viewfinder.classList.add("hidden");
+          canvas.classList.remove("hidden");
+
+          await runOcrOnCanvas(canvas);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function runOcrOnCanvas(sourceCanvas) {
+      const progressWrap = document.getElementById("ocr-progress-wrap");
+      const progressLabel = document.getElementById("ocr-progress-label");
+      const progressPct = document.getElementById("ocr-progress-pct");
+      const progressBar = document.getElementById("ocr-progress-bar");
+      const resultBox = document.getElementById("ocr-result-box");
+      const resultTitle = document.getElementById("ocr-result-title");
+      const candidatesEl = document.getElementById("ocr-candidates");
+      const captureBtn = document.getElementById("btn-capture-ocr");
+
+      progressWrap.classList.remove("hidden");
+      resultBox.classList.add("hidden");
+      captureBtn.disabled = true;
+      progressLabel.textContent = "Menyiapkan mesin Tesseract OCR...";
+      progressPct.textContent = "0%";
+      progressBar.style.width = "0%";
+
+      try {
+        if (typeof Tesseract === "undefined") {
+          throw new Error("Library Tesseract.js belum termuat");
+        }
+
+        const procCanvas = document.createElement("canvas");
+        procCanvas.width = sourceCanvas.width;
+        procCanvas.height = sourceCanvas.height;
+        const pCtx = procCanvas.getContext("2d");
+        pCtx.filter = "grayscale(100%) contrast(145%)";
+        pCtx.drawImage(sourceCanvas, 0, 0);
+
+        const worker = await Tesseract.createWorker("eng", 1, {
+          logger: (m) => {
+            if (m.status === "recognizing text") {
+              const pct = Math.round((m.progress || 0) * 100);
+              progressLabel.textContent = "Membaca 16 digit Nomor KK...";
+              progressPct.textContent = `${pct}%`;
+              progressBar.style.width = `${pct}%`;
+            } else if (m.status) {
+              progressLabel.textContent = `Memproses: ${m.status}...`;
+            }
+          },
+        });
+
+        await worker.setParameters({
+          tessedit_char_whitelist: "0123456789",
+        });
+
+        const { data } = await worker.recognize(procCanvas);
+        await worker.terminate();
+
+        const rawText = data.text || "";
+        const matches = rawText.match(/\b\d{16}\b/g) || [];
+        const uniqueMatches = Array.from(new Set(matches));
+
+        if (uniqueMatches.length > 0) {
+          const primaryKK = uniqueMatches[0];
+          applyScannedKK(primaryKK);
+
+          if (uniqueMatches.length === 1) {
+            showToast(`Nomor KK terdeteksi: ${primaryKK}`, "success");
+            closeScannerModal();
+          } else {
+            resultBox.classList.remove("hidden");
+            resultTitle.textContent = `Nomor KK utama diisi (${primaryKK}). Ditemukan ${uniqueMatches.length} deret 16 digit — ketuk untuk memilih:`;
+            candidatesEl.innerHTML = uniqueMatches
+              .map(
+                (num) => `
+                <button
+                  type="button"
+                  onclick="applyScannedKK('${num}'); closeScannerModal();"
+                  class="px-3 min-h-[38px] rounded-lg border border-slate-300 bg-white hover:border-[#C8102E] hover:text-[#C8102E] font-mono text-xs font-bold tabular-nums"
+                >
+                  ${num}
+                </button>
+              `
+              )
+              .join("");
+          }
+        } else {
+          resultBox.classList.remove("hidden");
+          resultTitle.textContent =
+            "Belum ditemukan 16 digit Nomor KK yang jelas. Pastikan pencahayaan cukup dan foto tidak buram, lalu coba lagi.";
+          candidatesEl.innerHTML = `
+            <button
+              type="button"
+              onclick="openScannerModal()"
+              class="px-3.5 min-h-[38px] rounded-lg bg-slate-900 text-white text-xs font-semibold"
+            >
+              Aktifkan Kamera Ulang
+            </button>
+          `;
+        }
+      } catch (err) {
+        resultBox.classList.remove("hidden");
+        resultTitle.textContent = `Gagal memproses OCR: ${err.message}`;
+        candidatesEl.innerHTML = "";
+      } finally {
+        progressWrap.classList.add("hidden");
+        captureBtn.disabled = false;
+      }
+    }
+
+    function applyScannedKK(kkNumber) {
+      const input = document.getElementById("input-no-kk");
+      input.value = kkNumber;
+      document.getElementById("kk-digit-counter").textContent = `${kkNumber.length}/16 digit`;
+      document.getElementById("btn-clear-kk").classList.remove("hidden");
+      checkGlobalQuota(kkNumber);
+    }
+
+    // =========================================================================
+    // 11. PENGATURAN URL API, SHARE LINK & UTILITAS UI
+    // =========================================================================
+    function openApiModal() {
+      if (!appState.adminPin) {
+        showToast("Akses pengaturan URL API hanya melalui Panel Admin Pusat", "error");
+        return;
+      }
+      document.getElementById("input-api-url").value = appState.apiUrl;
+      document.getElementById("modal-api").classList.remove("hidden");
+    }
+
+    function closeApiModal() {
+      document.getElementById("modal-api").classList.add("hidden");
+    }
+
+    function handleSaveApiUrl(e) {
+      e.preventDefault();
+      const newUrl = document.getElementById("input-api-url").value.trim();
+      if (!newUrl) return;
+      appState.apiUrl = newUrl;
+      localStorage.setItem(STORAGE_KEYS.API_URL, newUrl);
+      closeApiModal();
+      showToast("URL API disimpan, menyinkronkan ulang...", "success");
+
+      if (appState.adminPin) {
+        refreshAdminList();
+      }
+      if (appState.session) {
+        fetchAuthenticatedTransactions(true);
+      } else {
+        loadActiveKdkmpList(true);
+      }
+    }
+
+    function resetDefaultApiUrl() {
+      document.getElementById("input-api-url").value = APPS_SCRIPT_URL;
+      appState.apiUrl = APPS_SCRIPT_URL;
+      localStorage.setItem(STORAGE_KEYS.API_URL, APPS_SCRIPT_URL);
+      showToast("URL API dikembalikan ke default", "success");
+    }
+
+    async function copyShareLink() {
+      if (!appState.session) return;
+      const shareUrl = new URL(window.location.href);
+      shareUrl.searchParams.set("kdkmp", appState.session.Kode_KDKMP);
+      const text = shareUrl.toString();
+
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast(`Link login ${appState.session.Kode_KDKMP} disalin`, "success");
+      } catch (e) {
+        const temp = document.createElement("input");
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+        showToast(`Link login ${appState.session.Kode_KDKMP} disalin`, "success");
+      }
+    }
+
+    function togglePasswordVisibility(inputId, iconId) {
+      const input = document.getElementById(inputId);
+      const icon = document.getElementById(iconId);
+      if (input.type === "password") {
+        input.type = "text";
+        icon.setAttribute("data-lucide", "eye-off");
+      } else {
+        input.type = "password";
+        icon.setAttribute("data-lucide", "eye");
+      }
+      lucide.createIcons();
+    }
+
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+      const styleMap = {
+        success: "bg-slate-900 text-white border-slate-800",
+        error: "bg-[#C8102E] text-white border-[#A00C24]",
+        info: "bg-white text-slate-900 border-slate-200",
+      };
+      toast.className = `pointer-events-auto px-4 py-3 rounded-xl border shadow-lg text-xs sm:text-sm font-medium flex items-center justify-between gap-3 transition-opacity duration-200 ${styleMap[type] || styleMap.info}`;
+      toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.add("opacity-0");
+        setTimeout(() => toast.remove(), 220);
+      }, 3500);
+    }
+
+    function formatShortDate(isoOrRaw) {
+      if (!isoOrRaw) return "-";
+      const d = new Date(isoOrRaw);
+      if (isNaN(d.getTime())) return String(isoOrRaw);
+      return d.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function formatPeriodLabel(ym) {
+      if (!/^\d{4}-\d{2}$/.test(ym)) return ym;
+      const [y, m] = ym.split("-");
+      const date = new Date(Number(y), Number(m) - 1, 1);
+      return date.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+  </script>
+</body>
+</html>
