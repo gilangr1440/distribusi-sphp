@@ -45,8 +45,8 @@
   <!-- Tesseract.js v5 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-  <!-- SheetJS (XLSX) CDN for Export Excel -->
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <!-- ExcelJS v4.4.0 CDN for Export Excel (.xlsx) lengkap dengan Gambar KK -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 
   <style>
     body {
@@ -491,10 +491,10 @@
           id="btn-export-excel"
           type="button"
           onclick="exportExcel()"
-          class="inline-flex items-center gap-1.5 px-3.5 min-h-[44px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]"
+          class="inline-flex items-center gap-1.5 px-3.5 min-h-[44px] text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 disabled:bg-emerald-700/75 disabled:cursor-wait rounded-xl transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
         >
-          <i data-lucide="file-spreadsheet" class="w-4 h-4 text-emerald-700"></i>
-          <span>Export Excel</span>
+          <span id="btn-export-excel-icon-wrap" class="inline-flex items-center justify-center"><i data-lucide="file-spreadsheet" class="w-4 h-4"></i></span>
+          <span id="btn-export-excel-text" class="tabular-nums">Download Excel (.xlsx)</span>
         </button>
       </div>
     </section>
@@ -1313,6 +1313,7 @@
       isLoadingTx: false,
       isSubmitting: false,
       isCheckingQuota: false,
+      isExportingExcel: false,
       quotaState: {
         checked: false,
         noKK: "",
@@ -3360,17 +3361,119 @@
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
 
-    function buildSheetFromAoa(rows, colWidths) {
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      ws["!cols"] = colWidths.map((wch) => ({ wch }));
-      return ws;
+    function setExcelExportProgress(isLoading, labelText = "Download Excel (.xlsx)") {
+      appState.isExportingExcel = isLoading;
+      const btn = document.getElementById("btn-export-excel");
+      const textEl = document.getElementById("btn-export-excel-text");
+      const iconWrap = document.getElementById("btn-export-excel-icon-wrap");
+      if (btn) btn.disabled = isLoading;
+      if (textEl) textEl.textContent = labelText;
+      if (iconWrap) {
+        iconWrap.innerHTML = isLoading
+          ? '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>'
+          : '<i data-lucide="file-spreadsheet" class="w-4 h-4"></i>';
+        lucide.createIcons();
+      }
     }
 
-    function exportExcel() {
-      if (!appState.session) return;
+    function convertDataUrlToJpegBase64(dataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const compressed = compressImageSourceToJpeg(img, 1000, 0.8);
+            resolve({ base64: compressed.base64, extension: "jpeg" });
+          } catch (err) {
+            reject(err);
+          }
+        };
+        img.onerror = () => reject(new Error("Gagal mengonversi format gambar"));
+        img.src = dataUrl;
+      });
+    }
+
+    async function fetchImageBase64ForExcel(driveUrl) {
+      const endpoint = buildGetUrl({
+        action: "get_image_base64",
+        url: driveUrl,
+      });
+
+      const res = await fetch(endpoint, { method: "GET", redirect: "follow" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const rawText = (await res.text()).trim();
+      if (!rawText) throw new Error("Respons gambar kosong");
+
+      let base64Str = "";
+      let mimeType = "";
+
+      if (rawText.startsWith("{")) {
+        let json = null;
+        try {
+          json = JSON.parse(rawText);
+        } catch (e) {}
+
+        if (json) {
+          if (json.status === "error" || json.success === false) {
+            throw new Error(json.message || "Gagal mengambil gambar dari server");
+          }
+          base64Str = String(
+            json.base64 ??
+            json.Base64 ??
+            json.dataUrl ??
+            json.data_url ??
+            json.image ??
+            json.foto_base64 ??
+            json.Foto_Base64 ??
+            json.data ??
+            json.result ??
+            ""
+          ).trim();
+          mimeType = String(json.mimeType ?? json.mime_type ?? json.contentType ?? "").trim().toLowerCase();
+        }
+      } else if (!rawText.startsWith("<")) {
+        base64Str = rawText;
+      }
+
+      if (!base64Str) {
+        throw new Error("Data base64 gambar tidak ditemukan");
+      }
+
+      // Deteksi MIME & ekstensi (ExcelJS mendukung: jpeg, png, gif)
+      const dataUriMatch = base64Str.match(/^data:image\/([a-zA-Z0-9.+-]+);base64,/i);
+      let ext = "jpeg";
+
+      if (dataUriMatch) {
+        const sub = dataUriMatch[1].toLowerCase();
+        if (sub === "png") ext = "png";
+        else if (sub === "gif") ext = "gif";
+        else if (sub === "jpg" || sub === "jpeg") ext = "jpeg";
+        else {
+          // Format lain (misal webp) dikonversi via canvas menjadi JPEG agar didukung ExcelJS
+          return await convertDataUrlToJpegBase64(base64Str);
+        }
+      } else {
+        if (mimeType.includes("png")) ext = "png";
+        else if (mimeType.includes("gif")) ext = "gif";
+        else if (mimeType.includes("webp")) {
+          return await convertDataUrlToJpegBase64(`data:image/webp;base64,${base64Str.replace(/\s+/g, "")}`);
+        }
+        base64Str = `data:image/${ext};base64,${base64Str.replace(/\s+/g, "")}`;
+      }
+
+      return { base64: base64Str, extension: ext };
+    }
+
+    async function exportExcel() {
+      if (!appState.session || appState.isExportingExcel) return;
       const periodTx = getPeriodTransactions();
       if (periodTx.length === 0) {
         showToast("Tidak ada data transaksi pada periode ini untuk diekspor", "error");
+        return;
+      }
+
+      if (typeof ExcelJS === "undefined" || !ExcelJS.Workbook) {
+        showToast("Library ExcelJS belum termuat. Periksa koneksi internet lalu muat ulang halaman.", "error");
         return;
       }
 
@@ -3388,119 +3491,281 @@
         if (dateA !== dateB) return dateB.localeCompare(dateA);
         return new Date(b.timestamp || 0) - new Date(a.timestamp || 0);
       });
+      const recapList = buildRecapPerKK(periodTx);
 
-      const historyHeaders = [
-        "Tanggal_Pembelian",
-        "Timestamp_WIB",
-        "Bulan_Periode",
-        "Kode_KDKMP",
-        "Nama_KDKMP",
-        "No_KK",
-        "Nama_Kepala_Keluarga",
-        "RT_RW",
-        "Jumlah_Pcs",
-        "Jumlah_Kg",
-        "Link_Foto_KK",
-      ];
-      const historyRows = [
-        historyHeaders,
-        ...sortedTx.map((tx) => [
-          tx.tanggalPembelian || "",
-          formatTimestampAsiaJakarta(tx.rawTimestamp || tx.timestamp),
-          tx.bulanPeriode,
-          unitCode,
-          unitName,
-          String(tx.noKK || ""),
-          tx.nama,
-          tx.rtRw,
-          Number(tx.jumlah) || 0,
-          (Number(tx.jumlah) || 0) * 5,
-          tx.linkFotoKK || "",
-        ]),
-      ];
+      // Kumpulkan URL foto unik agar tidak mengunduh foto yang sama berulang kali
+      const uniquePhotoUrls = [];
+      const seenUrls = new Set();
+      sortedTx.forEach((tx) => {
+        if (tx.linkFotoKK && !seenUrls.has(tx.linkFotoKK)) {
+          seenUrls.add(tx.linkFotoKK);
+          uniquePhotoUrls.push(tx.linkFotoKK);
+        }
+      });
+      recapList.forEach((r) => {
+        if (r.linkFotoKK && !seenUrls.has(r.linkFotoKK)) {
+          seenUrls.add(r.linkFotoKK);
+          uniquePhotoUrls.push(r.linkFotoKK);
+        }
+      });
 
-      const recapHeaders = [
-        "Kode_KDKMP",
-        "Nama_KDKMP",
-        "Bulan_Periode",
-        "No_KK",
-        "Nama_Kepala_Keluarga",
-        "RT_RW",
-        "Terpakai_Pcs",
-        "Terpakai_Kg",
-        "Kuota_Max_Pcs",
-        "Sisa_Unit_Pcs",
-      ];
-      const recapRows = [
-        recapHeaders,
-        ...buildRecapPerKK(periodTx).map((r) => [
-          unitCode,
-          unitName,
-          appState.selectedPeriod,
-          String(r.noKK || ""),
-          r.nama,
-          r.rtRw,
-          Number(r.terpakai) || 0,
-          (Number(r.terpakai) || 0) * 5,
-          Number(r.maxKuota) || 0,
-          Number(r.sisa) || 0,
-        ]),
-      ];
+      setExcelExportProgress(true, "Menyiapkan Excel (0%)...");
 
-      const isRecap = appState.activeTab === "recap";
+      try {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = `SPHP KDKMP - ${unitName}`;
+        workbook.created = new Date();
 
-      if (typeof XLSX !== "undefined" && XLSX.utils) {
-        const filename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.xlsx`;
-        const wb = XLSX.utils.book_new();
-        const wsHistory = buildSheetFromAoa(historyRows, [18, 25, 14, 15, 28, 20, 26, 12, 12, 12, 38]);
-        const wsRecap = buildSheetFromAoa(recapRows, [15, 28, 14, 20, 26, 12, 14, 14, 15, 14]);
+        // Unduh seluruh foto KK unik ke Base64 & daftarkan ke workbook dengan progres
+        const imageIdByUrl = new Map();
+        const totalPhotos = uniquePhotoUrls.length;
+        let loadedPhotos = 0;
+        let failedPhotos = 0;
 
-        if (isRecap) {
-          XLSX.utils.book_append_sheet(wb, wsRecap, "Rekap per KK");
-          XLSX.utils.book_append_sheet(wb, wsHistory, "Riwayat Transaksi");
-        } else {
-          XLSX.utils.book_append_sheet(wb, wsHistory, "Riwayat Transaksi");
-          XLSX.utils.book_append_sheet(wb, wsRecap, "Rekap per KK");
+        for (let i = 0; i < totalPhotos; i++) {
+          const url = uniquePhotoUrls[i];
+          const pct = Math.round(((i) / Math.max(1, totalPhotos)) * 85);
+          setExcelExportProgress(true, `Unduh Foto ${i + 1}/${totalPhotos} (${pct}%)...`);
+
+          try {
+            const imgData = await fetchImageBase64ForExcel(url);
+            const imgId = workbook.addImage({
+              base64: imgData.base64,
+              extension: imgData.extension,
+            });
+            imageIdByUrl.set(url, imgId);
+            loadedPhotos += 1;
+          } catch (imgErr) {
+            console.warn("Gagal menyematkan foto KK ke Excel:", url, imgErr);
+            failedPhotos += 1;
+          }
         }
 
-        XLSX.writeFile(wb, filename);
-        showToast(`File Excel ${filename} berhasil diunduh`, "success");
-        return;
+        setExcelExportProgress(true, "Menyusun Workbook (90%)...");
+
+        // =====================================================================
+        // SHEET 1: RIWAYAT TRANSAKSI (DENGAN GAMBAR FISIK KK DI DALAM SEL)
+        // =====================================================================
+        const sheet = workbook.addWorksheet("Riwayat Transaksi", {
+          views: [{ state: "frozen", ySplit: 1 }],
+        });
+
+        sheet.columns = [
+          { header: "No", key: "no", width: 6 },
+          { header: "Tanggal Pembelian", key: "tanggal", width: 18 },
+          { header: "No. KK", key: "noKK", width: 22 },
+          { header: "Nama Kepala Keluarga", key: "nama", width: 28 },
+          { header: "RT/RW", key: "rtRw", width: 12 },
+          { header: "Jumlah (Pcs)", key: "jumlah", width: 14 },
+          { header: "Foto Fisik KK", key: "foto", width: 26 },
+        ];
+
+        // Format header Merah Putih (#C8102E)
+        const headerRow = sheet.getRow(1);
+        headerRow.height = 28;
+        headerRow.eachCell((cell) => {
+          cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFC8102E" } };
+          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFA00C24" } },
+            left: { style: "thin", color: { argb: "FFA00C24" } },
+            bottom: { style: "medium", color: { argb: "FFA00C24" } },
+            right: { style: "thin", color: { argb: "FFA00C24" } },
+          };
+        });
+
+        sortedTx.forEach((tx, idx) => {
+          const rowNumber = idx + 2;
+          const imgId = tx.linkFotoKK ? imageIdByUrl.get(tx.linkFotoKK) : undefined;
+          const fallbackPhotoText = !tx.linkFotoKK
+            ? "Belum ada foto"
+            : imgId === undefined
+            ? tx.linkFotoKK
+            : "";
+
+          const row = sheet.addRow({
+            no: idx + 1,
+            tanggal: String(tx.tanggalPembelian || formatDateOnly(tx.timestamp) || ""),
+            noKK: String(tx.noKK || ""),
+            nama: String(tx.nama || ""),
+            rtRw: String(tx.rtRw || ""),
+            jumlah: Number(tx.jumlah) || 0,
+            foto: fallbackPhotoText,
+          });
+
+          // Tinggi baris 85 jika ada Link_Foto_KK agar gambar muat rapi di dalam sel
+          row.height = tx.linkFotoKK ? 85 : 24;
+
+          const zebraFill = idx % 2 === 1
+            ? { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } }
+            : null;
+
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.font = { name: "Calibri", size: 10.5, color: { argb: "FF0F172A" } };
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+            if (zebraFill) cell.fill = zebraFill;
+
+            if (colNumber === 1) {
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 2) {
+              cell.numFmt = "@";
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 3) {
+              // Simpan No. KK sebagai String murni agar 16 digit tidak rusak menjadi E+15
+              cell.value = String(tx.noKK || "");
+              cell.numFmt = "@";
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 4) {
+              cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+            } else if (colNumber === 5) {
+              // Simpan RT/RW sebagai String murni agar tidak berubah menjadi tanggal di Excel
+              cell.value = String(tx.rtRw || "");
+              cell.numFmt = "@";
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 6) {
+              cell.numFmt = "#,##0";
+              cell.font = { name: "Calibri", size: 10.5, bold: true, color: { argb: "FFC8102E" } };
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 7) {
+              cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+              if (!tx.linkFotoKK) {
+                cell.font = { name: "Calibri", size: 9.5, italic: true, color: { argb: "FF94A3B8" } };
+              }
+            }
+          });
+
+          // Sematkan gambar langsung ke dalam sel kolom Foto Fisik KK (col index 6 = kolom ke-7)
+          if (imgId !== undefined) {
+            sheet.addImage(imgId, {
+              tl: { col: 6.08, row: rowNumber - 1 + 0.06 },
+              ext: { width: 160, height: 100 },
+              editAs: "oneCell",
+            });
+          }
+        });
+
+        // =====================================================================
+        // SHEET 2: REKAP PER KK (MENGGUNAKAN CACHE FOTO YANG SUDAH DIUNDUH)
+        // =====================================================================
+        const recapSheet = workbook.addWorksheet("Rekap per KK", {
+          views: [{ state: "frozen", ySplit: 1 }],
+        });
+
+        recapSheet.columns = [
+          { header: "No", key: "no", width: 6 },
+          { header: "No. KK", key: "noKK", width: 22 },
+          { header: "Nama Kepala Keluarga", key: "nama", width: 28 },
+          { header: "RT/RW", key: "rtRw", width: 12 },
+          { header: "Terpakai (Pcs)", key: "terpakai", width: 15 },
+          { header: "Terpakai (Kg)", key: "terpakaiKg", width: 14 },
+          { header: "Sisa Kuota Unit", key: "sisa", width: 15 },
+          { header: "Foto Fisik KK", key: "foto", width: 26 },
+        ];
+
+        const recapHeaderRow = recapSheet.getRow(1);
+        recapHeaderRow.height = 28;
+        recapHeaderRow.eachCell((cell) => {
+          cell.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFC8102E" } };
+          cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+          cell.border = {
+            top: { style: "thin", color: { argb: "FFA00C24" } },
+            left: { style: "thin", color: { argb: "FFA00C24" } },
+            bottom: { style: "medium", color: { argb: "FFA00C24" } },
+            right: { style: "thin", color: { argb: "FFA00C24" } },
+          };
+        });
+
+        recapList.forEach((r, idx) => {
+          const rowNumber = idx + 2;
+          const imgId = r.linkFotoKK ? imageIdByUrl.get(r.linkFotoKK) : undefined;
+          const fallbackPhotoText = !r.linkFotoKK
+            ? "Belum ada foto"
+            : imgId === undefined
+            ? r.linkFotoKK
+            : "";
+
+          const row = recapSheet.addRow({
+            no: idx + 1,
+            noKK: String(r.noKK || ""),
+            nama: String(r.nama || ""),
+            rtRw: String(r.rtRw || ""),
+            terpakai: Number(r.terpakai) || 0,
+            terpakaiKg: (Number(r.terpakai) || 0) * 5,
+            sisa: Number(r.sisa) || 0,
+            foto: fallbackPhotoText,
+          });
+
+          row.height = r.linkFotoKK ? 85 : 24;
+
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.font = { name: "Calibri", size: 10.5, color: { argb: "FF0F172A" } };
+            cell.border = {
+              top: { style: "thin", color: { argb: "FFE2E8F0" } },
+              left: { style: "thin", color: { argb: "FFE2E8F0" } },
+              bottom: { style: "thin", color: { argb: "FFE2E8F0" } },
+              right: { style: "thin", color: { argb: "FFE2E8F0" } },
+            };
+            if (colNumber === 1 || colNumber === 5 || colNumber === 6 || colNumber === 7) {
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 2) {
+              cell.value = String(r.noKK || "");
+              cell.numFmt = "@";
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 3) {
+              cell.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
+            } else if (colNumber === 4) {
+              cell.value = String(r.rtRw || "");
+              cell.numFmt = "@";
+              cell.alignment = { vertical: "middle", horizontal: "center" };
+            } else if (colNumber === 8) {
+              cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+              if (!r.linkFotoKK) {
+                cell.font = { name: "Calibri", size: 9.5, italic: true, color: { argb: "FF94A3B8" } };
+              }
+            }
+          });
+
+          if (imgId !== undefined) {
+            recapSheet.addImage(imgId, {
+              tl: { col: 7.08, row: rowNumber - 1 + 0.06 },
+              ext: { width: 160, height: 100 },
+              editAs: "oneCell",
+            });
+          }
+        });
+
+        setExcelExportProgress(true, "Membuat File .xlsx (98%)...");
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        });
+
+        const filename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.xlsx`;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+
+        const photoNote = totalPhotos > 0
+          ? ` (${loadedPhotos}/${totalPhotos} foto KK tersemat${failedPhotos > 0 ? `, ${failedPhotos} fallback link` : ""})`
+          : "";
+        showToast(`File ${filename} berhasil diunduh${photoNote}`, "success");
+      } catch (err) {
+        console.error("ExcelJS export error:", err);
+        showToast(`Gagal membuat file Excel: ${err?.message || "Kesalahan tidak diketahui"}`, "error");
+      } finally {
+        setExcelExportProgress(false, "Download Excel (.xlsx)");
       }
-
-      // Fallback XML Spreadsheet 2003 (.xls) jika library SheetJS CDN tidak termuat
-      const fallbackFilename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.xls`;
-      const activeRows = isRecap ? recapRows : historyRows;
-      const sheetName = isRecap ? "Rekap per KK" : "Riwayat Transaksi";
-      const xmlRows = activeRows
-        .map(
-          (row, rIdx) =>
-            `<Row>${row
-              .map((cell) => {
-                const isNum = rIdx > 0 && typeof cell === "number" && !isNaN(cell);
-                const type = isNum ? "Number" : "String";
-                return `<Cell><Data ss:Type="${type}">${escapeXml(cell)}</Data></Cell>`;
-              })
-              .join("")}</Row>`
-        )
-        .join("");
-
-      const xmlContent =
-        `<?xml version="1.0" encoding="UTF-8"?>` +
-        `<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">` +
-        `<Worksheet ss:Name="${escapeXml(sheetName)}"><Table>${xmlRows}</Table></Worksheet>` +
-        `</Workbook>`;
-
-      const blob = new Blob([xmlContent], { type: "application/vnd.ms-excel;charset=utf-8;" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = fallbackFilename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-
-      showToast(`File Excel ${fallbackFilename} berhasil diunduh`, "success");
     }
 
     function csvEscapeCell(val) {
