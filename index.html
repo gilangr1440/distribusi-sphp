@@ -646,6 +646,82 @@
             </div>
           </div>
 
+          <!-- Upload / Foto Fisik KK -->
+          <div class="pt-1">
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="input-foto-kk" class="block text-sm font-semibold text-slate-800">
+                Foto Fisik KK <span class="text-xs font-normal text-slate-500">(Opsional)</span>
+              </label>
+              <span class="text-[11px] font-mono text-slate-400">Maks. 1000px · JPEG</span>
+            </div>
+
+            <div class="space-y-2.5">
+              <!-- Input File / Kamera -->
+              <label
+                id="kk-photo-upload-btn"
+                for="input-foto-kk"
+                class="w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors"
+              >
+                <i data-lucide="image-plus" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+                <span id="kk-photo-upload-label">Ambil Foto / Unggah Foto Fisik KK</span>
+                <input
+                  id="input-foto-kk"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onchange="handleKKPhotoFileChange(event)"
+                  class="hidden"
+                />
+              </label>
+
+              <!-- Preview Thumbnail Foto KK -->
+              <div
+                id="kk-photo-preview-wrap"
+                class="hidden rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center gap-3"
+              >
+                <img
+                  id="kk-photo-preview-img"
+                  src=""
+                  alt="Preview Foto Kartu Keluarga"
+                  class="w-20 h-14 rounded-lg object-cover border border-slate-200 bg-white shrink-0"
+                />
+                <div class="min-w-0 flex-1">
+                  <p id="kk-photo-source-label" class="text-xs font-semibold text-slate-900 truncate">Foto Fisik KK</p>
+                  <p id="kk-photo-meta-label" class="text-[11px] font-mono text-slate-500 mt-0.5 tabular-nums">—</p>
+                </div>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onclick="document.getElementById('input-foto-kk').click()"
+                    class="px-2.5 min-h-[34px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    Ganti
+                  </button>
+                  <button
+                    type="button"
+                    onclick="clearKKPhoto()"
+                    title="Hapus Foto KK"
+                    class="px-2.5 min-h-[34px] text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                  >
+                    Hapus
+                  </button>
+                </div>
+              </div>
+
+              <!-- Opsi Otomatis Simpan Foto dari Scan KK OCR -->
+              <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                <input
+                  id="chk-auto-save-ocr"
+                  type="checkbox"
+                  checked
+                  onchange="setAutoSaveOcrPhoto(this.checked)"
+                  class="w-4 h-4 rounded border-slate-300 text-[#C8102E] focus:ring-[#C8102E]"
+                />
+                <span>Otomatis simpan hasil tangkapan kamera <strong>Scan KK OCR</strong> sebagai foto KK</span>
+              </label>
+            </div>
+          </div>
+
           <!-- Submit Button -->
           <div class="pt-2">
             <button
@@ -946,6 +1022,18 @@
           <div id="ocr-candidates" class="flex flex-wrap gap-2"></div>
         </div>
 
+        <!-- Auto-save captured OCR image option -->
+        <label class="flex items-center gap-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 cursor-pointer select-none">
+          <input
+            id="chk-modal-auto-save-ocr"
+            type="checkbox"
+            checked
+            onchange="setAutoSaveOcrPhoto(this.checked)"
+            class="w-4 h-4 rounded border-slate-300 text-[#C8102E] focus:ring-[#C8102E]"
+          />
+          <span>Simpan otomatis foto tangkapan ini ke lampiran <strong>Foto Fisik KK</strong></span>
+        </label>
+
         <!-- Scanner Buttons -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <button
@@ -1097,6 +1185,8 @@
       adminFilter: "ALL",
       cameraStream: null,
       quotaDebounceTimer: null,
+      kkPhoto: null, // { base64, width, height, sizeKB, source }
+      autoSaveOcrPhoto: true,
     };
 
     // =========================================================================
@@ -1355,6 +1445,19 @@
         "Index",
       ]);
 
+      const rawLinkFoto = String(
+        pickField(raw, [
+          "Link_Foto_KK",
+          "Link_Foto",
+          "Foto_KK",
+          "URL_Foto_KK",
+          "Url_Foto",
+          "Link_KK",
+          "Drive_Link",
+        ]) ?? ""
+      ).trim();
+      const linkFotoKK = sanitizeExternalUrl(rawLinkFoto);
+
       return {
         id: resolvedId !== undefined && resolvedId !== null && String(resolvedId).trim() !== "" ? resolvedId : null,
         row: resolvedRow !== undefined && resolvedRow !== null && String(resolvedRow).trim() !== "" ? resolvedRow : null,
@@ -1369,6 +1472,7 @@
         nama: nama || "Tanpa Nama",
         rtRw: rtRw || "-",
         jumlah,
+        linkFotoKK,
         rawRecord: raw,
       };
     }
@@ -1606,8 +1710,10 @@
       appState.session = null;
       appState.transactions = [];
       resetQuotaStatusUI();
+      clearKKPhoto();
       document.getElementById("transaction-form").reset();
       document.getElementById("input-jumlah").value = "1";
+      setAutoSaveOcrPhoto(appState.autoSaveOcrPhoto);
       showAuthView();
       showToast("Anda telah keluar dari sesi KDKMP", "info");
     }
@@ -2431,9 +2537,11 @@
         Nama_Kepala_Keluarga: nama,
         RT_RW: rtRw,
         Jumlah_Beli: jumlah,
+        Foto_Base64: appState.kkPhoto?.base64 || "",
       };
 
-      setSubmitLoading(true);
+      const hasPhoto = Boolean(payload.Foto_Base64);
+      setSubmitLoading(true, hasPhoto);
 
       try {
         const res = await fetch(appState.apiUrl, {
@@ -2457,8 +2565,13 @@
         document.getElementById("input-tanggal").value = txDate;
         updateDateStatusLabel();
         document.getElementById("input-jumlah").value = "1";
+        clearKKPhoto();
+        setAutoSaveOcrPhoto(appState.autoSaveOcrPhoto);
         resetQuotaStatusUI(0);
-        showToast(`Tersimpan (${formatDateOnly(txDate)}): ${nama} (${jumlah} pcs / ${jumlah * 5} kg)`, "success");
+        showToast(
+          `Tersimpan (${formatDateOnly(txDate)}): ${nama} (${jumlah} pcs / ${jumlah * 5} kg)${hasPhoto ? " + Foto KK" : ""}`,
+          "success"
+        );
 
         await fetchAuthenticatedTransactions(false);
       } catch (err) {
@@ -2468,13 +2581,13 @@
       }
     }
 
-    function setSubmitLoading(isLoading) {
+    function setSubmitLoading(isLoading, hasPhoto = false) {
       appState.isSubmitting = isLoading;
       const btn = document.getElementById("btn-submit-tx");
       const text = document.getElementById("btn-submit-text");
       if (isLoading) {
         btn.disabled = true;
-        text.textContent = "Menyimpan ke Google Sheets...";
+        text.textContent = hasPhoto ? "Mengunggah Foto & Menyimpan..." : "Menyimpan ke Google Sheets...";
       } else {
         text.textContent = "Simpan Transaksi";
         updateQuantityPreview();
@@ -2751,13 +2864,28 @@
                   <p class="text-sm font-bold text-[#C8102E] tabular-nums">${tx.jumlah} pcs</p>
                   <p class="text-xs text-slate-500 tabular-nums">${tx.jumlah * 5} kg</p>
                 </div>
-                <button
-                  type="button"
-                  onclick="openDeleteModal('${escapeHtml(tx.clientKey)}')"
-                  class="px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-                >
-                  Hapus
-                </button>
+                <div class="flex items-center gap-1.5">
+                  ${
+                    tx.linkFotoKK
+                      ? `<a
+                          href="${escapeHtml(tx.linkFotoKK)}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                        >
+                          <i data-lucide="image" class="w-3 h-3 text-[#C8102E]"></i>
+                          <span>Lihat KK</span>
+                        </a>`
+                      : ""
+                  }
+                  <button
+                    type="button"
+                    onclick="openDeleteModal('${escapeHtml(tx.clientKey)}')"
+                    class="px-2.5 py-1 text-[11px] font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                  >
+                    Hapus
+                  </button>
+                </div>
               </div>
             </div>
           `
@@ -2771,6 +2899,7 @@
             <th class="py-3 px-4">Kepala Keluarga</th>
             <th class="py-3 px-4">RT/RW</th>
             <th class="py-3 px-4 text-right">Jumlah</th>
+            <th class="py-3 px-4 text-center">Foto KK</th>
             <th class="py-3 px-4 text-right">Aksi</th>
           </tr>
         `;
@@ -2786,6 +2915,22 @@
                 <span class="font-bold text-[#C8102E]">${tx.jumlah} pcs</span>
                 <span class="text-xs text-slate-500 ml-1">(${tx.jumlah * 5} kg)</span>
               </td>
+              <td class="py-3 px-4 text-center whitespace-nowrap">
+                ${
+                  tx.linkFotoKK
+                    ? `<a
+                        href="${escapeHtml(tx.linkFotoKK)}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Buka foto KK di Google Drive"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-lg transition-colors"
+                      >
+                        <i data-lucide="image" class="w-3.5 h-3.5 text-[#C8102E]"></i>
+                        <span>Lihat KK</span>
+                      </a>`
+                    : `<span class="text-xs text-slate-300">—</span>`
+                }
+              </td>
               <td class="py-3 px-4 text-right whitespace-nowrap">
                 <button
                   type="button"
@@ -2799,6 +2944,7 @@
           `
           )
           .join("");
+        lucide.createIcons();
       } else {
         let recap = buildRecapPerKK(periodTx).filter((r) => {
           if (!query) return true;
@@ -2932,6 +3078,7 @@
         "RT_RW",
         "Jumlah_Pcs",
         "Jumlah_Kg",
+        "Link_Foto_KK",
       ];
       const historyRows = [
         historyHeaders,
@@ -2946,6 +3093,7 @@
           tx.rtRw,
           Number(tx.jumlah) || 0,
           (Number(tx.jumlah) || 0) * 5,
+          tx.linkFotoKK || "",
         ]),
       ];
 
@@ -2982,7 +3130,7 @@
       if (typeof XLSX !== "undefined" && XLSX.utils) {
         const filename = `Laporan_SPHP_${safeUnitName}_${appState.selectedPeriod}.xlsx`;
         const wb = XLSX.utils.book_new();
-        const wsHistory = buildSheetFromAoa(historyRows, [18, 25, 14, 15, 28, 20, 26, 12, 12, 12]);
+        const wsHistory = buildSheetFromAoa(historyRows, [18, 25, 14, 15, 28, 20, 26, 12, 12, 12, 38]);
         const wsRecap = buildSheetFromAoa(recapRows, [15, 28, 14, 20, 26, 12, 14, 14, 15, 14]);
 
         if (isRecap) {
@@ -3034,6 +3182,142 @@
     }
 
     // =========================================================================
+    // 9B. UPLOAD & KOMPRESI FOTO FISIK KK (CANVAS MAX 1000PX, JPEG 0.75)
+    // =========================================================================
+    function sanitizeExternalUrl(rawUrl) {
+      const str = String(rawUrl ?? "").trim();
+      if (!str) return "";
+      try {
+        const parsed = new URL(str);
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+          return parsed.href;
+        }
+      } catch (e) {}
+      return "";
+    }
+
+    function compressImageSourceToJpeg(source, maxWidth = 1000, quality = 0.75) {
+      const origW = source.naturalWidth || source.videoWidth || source.width || 0;
+      const origH = source.naturalHeight || source.videoHeight || source.height || 0;
+      if (!origW || !origH) {
+        throw new Error("Dimensi gambar tidak valid");
+      }
+
+      let targetW = origW;
+      let targetH = origH;
+      if (origW > maxWidth) {
+        const ratio = maxWidth / origW;
+        targetW = maxWidth;
+        targetH = Math.max(1, Math.round(origH * ratio));
+      }
+
+      const outCanvas = document.createElement("canvas");
+      outCanvas.width = targetW;
+      outCanvas.height = targetH;
+      const ctx = outCanvas.getContext("2d");
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(source, 0, 0, targetW, targetH);
+
+      const base64 = outCanvas.toDataURL("image/jpeg", quality);
+      const base64Body = base64.split(",")[1] || "";
+      const sizeKB = Math.max(1, Math.round((base64Body.length * 3) / 4 / 1024));
+
+      return { base64, width: targetW, height: targetH, sizeKB };
+    }
+
+    function setAutoSaveOcrPhoto(enabled) {
+      appState.autoSaveOcrPhoto = Boolean(enabled);
+      const chkForm = document.getElementById("chk-auto-save-ocr");
+      const chkModal = document.getElementById("chk-modal-auto-save-ocr");
+      if (chkForm) chkForm.checked = appState.autoSaveOcrPhoto;
+      if (chkModal) chkModal.checked = appState.autoSaveOcrPhoto;
+    }
+
+    function renderKKPhotoPreview() {
+      const wrap = document.getElementById("kk-photo-preview-wrap");
+      const img = document.getElementById("kk-photo-preview-img");
+      const sourceLabel = document.getElementById("kk-photo-source-label");
+      const metaLabel = document.getElementById("kk-photo-meta-label");
+      const uploadLabel = document.getElementById("kk-photo-upload-label");
+      if (!wrap || !img) return;
+
+      if (appState.kkPhoto && appState.kkPhoto.base64) {
+        img.src = appState.kkPhoto.base64;
+        if (sourceLabel) sourceLabel.textContent = appState.kkPhoto.source || "Foto Fisik KK";
+        if (metaLabel) {
+          metaLabel.textContent = `${appState.kkPhoto.width}×${appState.kkPhoto.height} px · ~${appState.kkPhoto.sizeKB} KB (JPEG 75%)`;
+        }
+        if (uploadLabel) uploadLabel.textContent = "Ganti Foto Fisik KK";
+        wrap.classList.remove("hidden");
+      } else {
+        img.src = "";
+        if (uploadLabel) uploadLabel.textContent = "Ambil Foto / Unggah Foto Fisik KK";
+        wrap.classList.add("hidden");
+      }
+    }
+
+    function clearKKPhoto() {
+      appState.kkPhoto = null;
+      const input = document.getElementById("input-foto-kk");
+      if (input) input.value = "";
+      renderKKPhotoPreview();
+    }
+
+    function attachOcrCanvasAsKKPhoto(sourceCanvas, sourceLabel = "Hasil Scan KK OCR") {
+      if (!appState.autoSaveOcrPhoto) return;
+      try {
+        const compressed = compressImageSourceToJpeg(sourceCanvas, 1000, 0.75);
+        appState.kkPhoto = {
+          ...compressed,
+          source: sourceLabel,
+        };
+        renderKKPhotoPreview();
+      } catch (err) {
+        console.warn("Gagal menyimpan foto hasil OCR:", err);
+      }
+    }
+
+    function handleKKPhotoFileChange(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      if (!file.type || !file.type.startsWith("image/")) {
+        showToast("File harus berupa gambar (JPG/PNG/WebP)", "error");
+        event.target.value = "";
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const compressed = compressImageSourceToJpeg(img, 1000, 0.75);
+            appState.kkPhoto = {
+              ...compressed,
+              source: file.name || "Foto Fisik KK",
+            };
+            renderKKPhotoPreview();
+            showToast(`Foto KK dikompresi (~${compressed.sizeKB} KB) & siap diunggah`, "success");
+          } catch (err) {
+            showToast(`Gagal memproses foto KK: ${err.message}`, "error");
+          }
+        };
+        img.onerror = () => {
+          showToast("Gambar tidak dapat dibaca. Silakan pilih foto lain.", "error");
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = () => {
+        showToast("Gagal membaca file gambar.", "error");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // =========================================================================
     // 10. PEMINDAI KAMERA OCR NOMOR KK (TESSERACT.JS v5)
     // =========================================================================
     async function openScannerModal() {
@@ -3044,6 +3328,8 @@
       const fallback = document.getElementById("ocr-camera-fallback");
       const resultBox = document.getElementById("ocr-result-box");
       const progressWrap = document.getElementById("ocr-progress-wrap");
+
+      setAutoSaveOcrPhoto(appState.autoSaveOcrPhoto);
 
       modal.classList.remove("hidden");
       video.classList.remove("hidden");
@@ -3109,6 +3395,9 @@
       canvas.height = video.videoHeight;
       canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
 
+      // Simpan otomatis hasil tangkapan kamera sebagai foto KK (terkompresi maks. 1000px JPEG 0.75)
+      attachOcrCanvasAsKKPhoto(canvas, "Hasil Kamera Scan KK OCR");
+
       video.classList.add("hidden");
       document.getElementById("ocr-viewfinder").classList.add("hidden");
       canvas.classList.remove("hidden");
@@ -3141,6 +3430,9 @@
           canvas.width = w;
           canvas.height = h;
           canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+
+          // Simpan otomatis foto unggahan OCR sebagai foto KK (terkompresi maks. 1000px JPEG 0.75)
+          attachOcrCanvasAsKKPhoto(canvas, file.name ? `OCR · ${file.name}` : "Hasil Unggah Scan KK OCR");
 
           video.classList.add("hidden");
           fallback.classList.add("hidden");
