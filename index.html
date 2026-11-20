@@ -650,7 +650,7 @@
           <div class="pt-1">
             <div class="flex items-center justify-between mb-1.5">
               <label for="input-foto-kk" class="block text-sm font-semibold text-slate-800">
-                Foto Fisik KK <span class="text-xs font-normal text-slate-500">(Opsional)</span>
+                Foto Fisik KK <span id="kk-photo-status-badge" class="text-xs font-normal text-slate-500">(Opsional)</span>
               </label>
               <span class="text-[11px] font-mono text-slate-400">Maks. 1000px · JPEG</span>
             </div>
@@ -660,7 +660,7 @@
               <label
                 id="kk-photo-upload-btn"
                 for="input-foto-kk"
-                class="w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors"
+                class="relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors"
               >
                 <i data-lucide="image-plus" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
                 <span id="kk-photo-upload-label">Ambil Foto / Unggah Foto Fisik KK</span>
@@ -670,9 +670,12 @@
                   accept="image/*"
                   capture="environment"
                   onchange="handleKKPhotoFileChange(event)"
-                  class="hidden"
+                  class="sr-only"
                 />
               </label>
+
+              <!-- Status Arsip / Wajib Upload Foto KK dari check_quota -->
+              <div id="kk-photo-requirement-box" class="hidden rounded-xl border p-3 flex items-start gap-2.5"></div>
 
               <!-- Preview Thumbnail Foto KK -->
               <div
@@ -1094,6 +1097,110 @@
   </div>
 
   <!-- ========================================================= -->
+  <!-- MODAL 3B: TAMBAH FOTO KK PADA TRANSAKSI YANG SUDAH ADA    -->
+  <!-- ========================================================= -->
+  <div id="modal-add-photo" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-add-photo-title">
+    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h2 id="modal-add-photo-title" class="text-base font-bold text-slate-900">Tambah Foto Fisik KK</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Unggah foto KK untuk transaksi yang sudah tercatat</p>
+        </div>
+        <button
+          type="button"
+          onclick="closeAddPhotoModal()"
+          aria-label="Tutup modal tambah foto"
+          class="w-10 h-10 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <!-- Ringkasan Transaksi Target -->
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-1">
+          <p id="add-photo-tx-nama" class="text-sm font-bold text-slate-900 truncate">—</p>
+          <p id="add-photo-tx-kk" class="text-xs font-mono text-slate-600 tabular-nums">—</p>
+          <p id="add-photo-tx-meta" class="text-xs text-slate-500 tabular-nums">—</p>
+        </div>
+
+        <!-- Input File / Kamera -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="modal-input-foto-kk" class="block text-xs font-semibold text-slate-800">
+              Pilih atau Ambil Foto KK
+            </label>
+            <span class="text-[11px] font-mono text-slate-400">Maks. 1000px · JPEG</span>
+          </div>
+          <label
+            for="modal-input-foto-kk"
+            class="w-full min-h-[48px] px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors"
+          >
+            <i data-lucide="camera" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+            <span id="modal-photo-upload-label">Ambil Foto / Pilih dari Galeri</span>
+            <input
+              id="modal-input-foto-kk"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onchange="handleModalPhotoFileChange(event)"
+              class="hidden"
+            />
+          </label>
+        </div>
+
+        <!-- Preview Thumbnail -->
+        <div
+          id="modal-photo-preview-wrap"
+          class="hidden rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex items-center gap-3"
+        >
+          <img
+            id="modal-photo-preview-img"
+            src=""
+            alt="Preview Foto KK"
+            class="w-20 h-14 rounded-lg object-cover border border-slate-200 bg-white shrink-0"
+          />
+          <div class="min-w-0 flex-1">
+            <p id="modal-photo-source-label" class="text-xs font-semibold text-slate-900 truncate">Foto Fisik KK</p>
+            <p id="modal-photo-meta-label" class="text-[11px] font-mono text-slate-500 mt-0.5 tabular-nums">—</p>
+          </div>
+          <button
+            type="button"
+            onclick="clearModalPhotoSelection()"
+            class="px-2.5 min-h-[34px] text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors shrink-0"
+          >
+            Hapus
+          </button>
+        </div>
+
+        <!-- Error Box -->
+        <div id="add-photo-error-box" class="hidden rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-800"></div>
+
+        <!-- Actions -->
+        <div class="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 pt-1">
+          <button
+            type="button"
+            onclick="closeAddPhotoModal()"
+            class="min-h-[44px] px-4 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+          >
+            Batal
+          </button>
+          <button
+            id="btn-confirm-add-photo"
+            type="button"
+            disabled
+            onclick="executeUploadTxPhoto()"
+            class="min-h-[44px] px-5 text-xs font-bold text-white bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 disabled:text-slate-500 disabled:cursor-not-allowed rounded-xl transition-colors inline-flex items-center justify-center gap-2"
+          >
+            <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+            <span id="btn-confirm-add-photo-text">Unggah &amp; Simpan Foto</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
   <!-- MODAL 4: PENGATURAN URL GOOGLE APPS SCRIPT                -->
   <!-- ========================================================= -->
   <div id="modal-api" class="hidden fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-api-title">
@@ -1177,9 +1284,12 @@
         maxKuota: 5,
         terpakaiGlobal: 0,
         sisaGlobal: 5,
+        fotoUrl: "",
         error: null,
       },
       pendingDeleteTx: null,
+      pendingPhotoTx: null,
+      pendingPhotoUpload: null, // { base64, width, height, sizeKB, source }
       adminPin: "",
       adminUnits: [],
       adminFilter: "ALL",
@@ -2248,6 +2358,7 @@
         maxKuota,
         terpakaiGlobal: 0,
         sisaGlobal: maxKuota,
+        fotoUrl: "",
         error: null,
       };
 
@@ -2275,6 +2386,7 @@
 
       renderQuickQtyButtons();
       updateQuantityPreview();
+      updateKKPhotoRequirementUI();
       lucide.createIcons();
     }
 
@@ -2349,6 +2461,11 @@
           autofillBadge.classList.add("hidden");
         }
 
+        const rawFotoUrl = String(
+          json.foto_url ?? json.Foto_URL ?? json.link_foto_kk ?? json.Link_Foto_KK ?? ""
+        ).trim();
+        const archivedFotoUrl = sanitizeExternalUrl(rawFotoUrl);
+
         appState.quotaState = {
           checked: true,
           noKK,
@@ -2356,6 +2473,7 @@
           maxKuota,
           terpakaiGlobal,
           sisaGlobal,
+          fotoUrl: archivedFotoUrl,
           error: null,
         };
 
@@ -2404,6 +2522,7 @@
           maxKuota: appState.session?.kdkmp_info?.Kuota_Max_Bulan || 5,
           terpakaiGlobal: 0,
           sisaGlobal: 0,
+          fotoUrl: "",
           error: err.message,
         };
         box.className = "mt-2.5 rounded-xl border border-red-200 bg-red-50 p-3 flex items-start gap-2.5";
@@ -2418,6 +2537,7 @@
         appState.isCheckingQuota = false;
         renderQuickQtyButtons();
         updateQuantityPreview();
+        updateKKPhotoRequirementUI();
         lucide.createIcons();
       }
     }
@@ -2516,6 +2636,12 @@
       }
       if (jumlah < 1 || jumlah > appState.quotaState.sisaGlobal) {
         showToast(`Jumlah beli melebihi sisa kuota (${appState.quotaState.sisaGlobal} pcs)`, "error");
+        return;
+      }
+      if (!appState.quotaState.fotoUrl && !appState.kkPhoto?.base64) {
+        showToast("Foto KK wajib diunggah untuk pendaftar baru", "error");
+        updateKKPhotoRequirementUI();
+        document.getElementById("kk-photo-upload-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
 
@@ -2876,7 +3002,14 @@
                           <i data-lucide="image" class="w-3 h-3 text-[#C8102E]"></i>
                           <span>Lihat KK</span>
                         </a>`
-                      : ""
+                      : `<button
+                          type="button"
+                          onclick="openAddPhotoModal('${escapeHtml(tx.clientKey)}')"
+                          class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-[#C8102E] bg-[#FEF2F2] hover:bg-red-100 border border-red-200/70 rounded-lg transition-colors"
+                        >
+                          <i data-lucide="camera" class="w-3 h-3"></i>
+                          <span>Tambah Foto</span>
+                        </button>`
                   }
                   <button
                     type="button"
@@ -2928,7 +3061,15 @@
                         <i data-lucide="image" class="w-3.5 h-3.5 text-[#C8102E]"></i>
                         <span>Lihat KK</span>
                       </a>`
-                    : `<span class="text-xs text-slate-300">—</span>`
+                    : `<button
+                        type="button"
+                        onclick="openAddPhotoModal('${escapeHtml(tx.clientKey)}')"
+                        title="Tambah foto Kartu Keluarga untuk transaksi ini"
+                        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-[#C8102E] bg-[#FEF2F2] hover:bg-red-100 border border-red-200/70 rounded-lg transition-colors"
+                      >
+                        <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                        <span>Tambah Foto</span>
+                      </button>`
                 }
               </td>
               <td class="py-3 px-4 text-right whitespace-nowrap">
@@ -3236,6 +3377,90 @@
       if (chkModal) chkModal.checked = appState.autoSaveOcrPhoto;
     }
 
+    function updateKKPhotoRequirementUI() {
+      const inputFoto = document.getElementById("input-foto-kk");
+      const badge = document.getElementById("kk-photo-status-badge");
+      const reqBox = document.getElementById("kk-photo-requirement-box");
+      const uploadBtn = document.getElementById("kk-photo-upload-btn");
+      if (!inputFoto || !badge || !reqBox || !uploadBtn) return;
+
+      const isChecked = Boolean(appState.quotaState.checked);
+      const archivedUrl = appState.quotaState.fotoUrl || "";
+      const hasLocalPhoto = Boolean(appState.kkPhoto && appState.kkPhoto.base64);
+
+      if (!isChecked) {
+        inputFoto.removeAttribute("required");
+        inputFoto.required = false;
+        badge.className = "text-xs font-normal text-slate-500";
+        badge.textContent = "(Opsional)";
+        reqBox.classList.add("hidden");
+        reqBox.innerHTML = "";
+        uploadBtn.className =
+          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors";
+        return;
+      }
+
+      if (archivedUrl) {
+        // Warga Lama: foto_url sudah ada di arsip -> hilangkan required & tampilkan info hijau
+        inputFoto.removeAttribute("required");
+        inputFoto.required = false;
+        badge.className = "text-xs font-semibold text-emerald-700";
+        badge.textContent = "(Opsional · Tersimpan di Arsip)";
+        uploadBtn.className =
+          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors";
+
+        reqBox.className = "rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-2.5";
+        reqBox.innerHTML = `
+          <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5"></i>
+          <div class="min-w-0 flex-1 space-y-1.5">
+            <p class="text-xs font-medium text-emerald-900 leading-relaxed">
+              Foto KK sudah tersimpan di arsip. Tidak perlu upload ulang (kecuali ingin memperbarui foto)
+            </p>
+            <a
+              href="${escapeHtml(archivedUrl)}"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 hover:text-emerald-950 underline underline-offset-2"
+            >
+              <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+              <span>Lihat Foto Tersimpan</span>
+            </a>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      // Warga Baru: foto_url kosong -> Foto KK WAJIB diunggah
+      badge.className = "text-xs font-bold text-[#C8102E]";
+      badge.textContent = "(Wajib)";
+
+      if (hasLocalPhoto) {
+        // Sudah ada foto terlampir (dari upload atau tangkapan kamera OCR)
+        inputFoto.removeAttribute("required");
+        inputFoto.required = false;
+        uploadBtn.className =
+          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors";
+        reqBox.classList.add("hidden");
+        reqBox.innerHTML = "";
+      } else {
+        inputFoto.setAttribute("required", "required");
+        inputFoto.required = true;
+        uploadBtn.className =
+          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-red-50/50 hover:bg-red-50 border border-dashed border-red-300 hover:border-[#C8102E] rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-[#C8102E] cursor-pointer transition-colors";
+
+        reqBox.className = "rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-2.5";
+        reqBox.innerHTML = `
+          <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs font-semibold text-amber-900">Foto KK wajib diunggah untuk pendaftar baru</p>
+            <p class="text-[11px] text-amber-800 mt-0.5">Unggah foto fisik KK di atas atau gunakan fitur Scan KK OCR.</p>
+          </div>
+        `;
+        lucide.createIcons();
+      }
+    }
+
     function renderKKPhotoPreview() {
       const wrap = document.getElementById("kk-photo-preview-wrap");
       const img = document.getElementById("kk-photo-preview-img");
@@ -3257,6 +3482,7 @@
         if (uploadLabel) uploadLabel.textContent = "Ambil Foto / Unggah Foto Fisik KK";
         wrap.classList.add("hidden");
       }
+      updateKKPhotoRequirementUI();
     }
 
     function clearKKPhoto() {
@@ -3315,6 +3541,219 @@
         showToast("Gagal membaca file gambar.", "error");
       };
       reader.readAsDataURL(file);
+    }
+
+    function openAddPhotoModal(clientKey) {
+      const tx = appState.transactions.find((t) => t.clientKey === clientKey);
+      if (!tx) {
+        showToast("Data transaksi tidak ditemukan di daftar lokal. Silakan sinkronkan ulang.", "error");
+        return;
+      }
+      appState.pendingPhotoTx = tx;
+      clearModalPhotoSelection();
+
+      const errBox = document.getElementById("add-photo-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
+
+      const tglLabel = formatDateOnly(tx.tanggalPembelian || tx.timestamp);
+      document.getElementById("add-photo-tx-nama").textContent = tx.nama;
+      document.getElementById("add-photo-tx-kk").textContent = `No. KK: ${tx.noKK}`;
+      document.getElementById("add-photo-tx-meta").textContent =
+        `Tgl Beli ${tglLabel} · RT/RW ${tx.rtRw} · ${tx.jumlah} pcs (${tx.jumlah * 5} kg)`;
+
+      document.getElementById("modal-add-photo").classList.remove("hidden");
+      lucide.createIcons();
+    }
+
+    function closeAddPhotoModal() {
+      appState.pendingPhotoTx = null;
+      clearModalPhotoSelection();
+      const errBox = document.getElementById("add-photo-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
+      document.getElementById("modal-add-photo").classList.add("hidden");
+    }
+
+    function clearModalPhotoSelection() {
+      appState.pendingPhotoUpload = null;
+      const input = document.getElementById("modal-input-foto-kk");
+      if (input) input.value = "";
+      const wrap = document.getElementById("modal-photo-preview-wrap");
+      const img = document.getElementById("modal-photo-preview-img");
+      const label = document.getElementById("modal-photo-upload-label");
+      const btn = document.getElementById("btn-confirm-add-photo");
+      const btnText = document.getElementById("btn-confirm-add-photo-text");
+      if (wrap) wrap.classList.add("hidden");
+      if (img) img.src = "";
+      if (label) label.textContent = "Ambil Foto / Pilih dari Galeri";
+      if (btn) btn.disabled = true;
+      if (btnText) btnText.textContent = "Unggah & Simpan Foto";
+    }
+
+    function handleModalPhotoFileChange(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const errBox = document.getElementById("add-photo-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
+
+      if (!file.type || !file.type.startsWith("image/")) {
+        showToast("File harus berupa gambar (JPG/PNG/WebP)", "error");
+        event.target.value = "";
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const compressed = compressImageSourceToJpeg(img, 1000, 0.75);
+            appState.pendingPhotoUpload = {
+              ...compressed,
+              source: file.name || "Foto Fisik KK",
+            };
+            document.getElementById("modal-photo-preview-img").src = compressed.base64;
+            document.getElementById("modal-photo-source-label").textContent = appState.pendingPhotoUpload.source;
+            document.getElementById("modal-photo-meta-label").textContent =
+              `${compressed.width}×${compressed.height} px · ~${compressed.sizeKB} KB (JPEG 75%)`;
+            document.getElementById("modal-photo-upload-label").textContent = "Ganti Foto Fisik KK";
+            document.getElementById("modal-photo-preview-wrap").classList.remove("hidden");
+            document.getElementById("btn-confirm-add-photo").disabled = false;
+          } catch (err) {
+            if (errBox) {
+              errBox.textContent = `Gagal mengompresi foto: ${err.message}`;
+              errBox.classList.remove("hidden");
+            }
+          }
+        };
+        img.onerror = () => {
+          if (errBox) {
+            errBox.textContent = "Gambar tidak dapat dibaca. Silakan pilih foto lain.";
+            errBox.classList.remove("hidden");
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = () => {
+        if (errBox) {
+          errBox.textContent = "Gagal membaca file gambar.";
+          errBox.classList.remove("hidden");
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function executeUploadTxPhoto() {
+      const tx = appState.pendingPhotoTx;
+      const photo = appState.pendingPhotoUpload;
+      if (!tx || !photo || !photo.base64 || !appState.session) return;
+
+      const btn = document.getElementById("btn-confirm-add-photo");
+      const btnText = document.getElementById("btn-confirm-add-photo-text");
+      const errBox = document.getElementById("add-photo-error-box");
+      if (errBox) {
+        errBox.classList.add("hidden");
+        errBox.textContent = "";
+      }
+
+      btn.disabled = true;
+      if (btnText) btnText.textContent = "Mengunggah Foto...";
+
+      try {
+        const tsValue = tx.rawTimestamp || tx.timestamp || "";
+        const payload = {
+          action: "update_photo",
+          Kode_KDKMP: tx.kodeKdkmp || appState.session.Kode_KDKMP,
+          PIN_KDKMP: appState.session.PIN_KDKMP,
+          Timestamp: tsValue,
+          timestamp: tsValue,
+          Tanggal_Pembelian: tx.tanggalPembelian || "",
+          Bulan_Periode: tx.bulanPeriode,
+          No_KK: tx.rawNoKK || tx.noKK,
+          Nama_Kepala_Keluarga: tx.nama,
+          Foto_Base64: photo.base64,
+        };
+
+        const hasValidId = tx.id !== null && tx.id !== undefined && String(tx.id).trim() !== "";
+        const hasValidRow = tx.row !== null && tx.row !== undefined && String(tx.row).trim() !== "";
+
+        if (hasValidRow) {
+          const numericRow = Number(tx.row);
+          const safeRow = !isNaN(numericRow) && numericRow > 0 ? numericRow : tx.row;
+          payload.row = safeRow;
+          payload.Row = safeRow;
+          payload.rowIndex = safeRow;
+          payload.RowIndex = safeRow;
+          if (!hasValidId) {
+            payload.id = safeRow;
+            payload.ID = safeRow;
+          }
+        }
+        if (hasValidId) {
+          payload.ID_Transaksi = tx.id;
+          payload.id_transaksi = tx.id;
+          payload.id = tx.id;
+          payload.ID = tx.id;
+        }
+
+        const res = await fetch(appState.apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+          redirect: "follow",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const rawText = await res.text();
+        let json = null;
+        if (rawText && rawText.trim()) {
+          try {
+            json = JSON.parse(rawText);
+          } catch (parseErr) {
+            if (rawText.trim().startsWith("<")) {
+              throw new Error("Respons server tidak valid (HTML). Periksa deployment Google Apps Script.");
+            }
+            if (/error|gagal|ditolak|salah|tidak ditemukan/i.test(rawText)) {
+              throw new Error(rawText.trim().slice(0, 160));
+            }
+          }
+        }
+
+        if (json && (json.status === "error" || json.success === false)) {
+          throw new Error(json.message || "Gagal mengunggah foto KK di server");
+        }
+
+        const returnedLink = sanitizeExternalUrl(
+          json?.Link_Foto_KK || json?.link_foto_kk || json?.url || json?.link || ""
+        );
+        if (returnedLink) {
+          tx.linkFotoKK = returnedLink;
+        }
+
+        const targetNama = tx.nama;
+        closeAddPhotoModal();
+        showToast(`Foto KK untuk ${targetNama} berhasil ditambahkan`, "success");
+        await fetchAuthenticatedTransactions(false);
+      } catch (err) {
+        const msg = err?.message || "Terjadi kesalahan saat mengunggah foto";
+        if (errBox) {
+          errBox.textContent = `Gagal mengunggah foto: ${msg}`;
+          errBox.classList.remove("hidden");
+        }
+        showToast(`Gagal mengunggah foto: ${msg}`, "error");
+      } finally {
+        btn.disabled = !appState.pendingPhotoUpload;
+        if (btnText) btnText.textContent = "Unggah & Simpan Foto";
+      }
     }
 
     // =========================================================================
