@@ -75,15 +75,67 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="fixed bottom-4 right-4 left-4 sm:left-auto sm:w-96 z-[70] flex flex-col gap-2 pointer-events-none"></div>
 
-  <!-- Hidden 1-Tap Quick Camera/File Picker for Update/Upload Foto KK -->
-  <input
-    id="quick-photo-file-input"
-    type="file"
-    accept="image/*"
-    capture="environment"
-    onchange="handleQuickPhotoFileChange(event)"
-    class="hidden"
-  />
+  <!-- Modal Pemilih Sumber Foto Cepat (Kamera vs Galeri/File) untuk Tabel -->
+  <div id="modal-quick-photo-source" class="hidden fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modal-quick-photo-title">
+    <div class="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h2 id="modal-quick-photo-title" class="text-base font-bold text-slate-900">Pilih Sumber Foto KK</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Kompresi otomatis maks. 1000px · JPEG 75%</p>
+        </div>
+        <button
+          type="button"
+          onclick="closeQuickPhotoSourceModal()"
+          aria-label="Tutup pilihan sumber foto"
+          class="w-10 h-10 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center"
+        >
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+          <p id="quick-photo-target-nama" class="text-sm font-bold text-slate-900 truncate">—</p>
+          <p id="quick-photo-target-kk" class="text-xs font-mono text-slate-600 mt-0.5 tabular-nums">—</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <label class="min-h-[52px] px-4 py-2.5 bg-[#C8102E] hover:bg-[#A00C24] text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
+            <i data-lucide="camera" class="w-4 h-4 shrink-0"></i>
+            <span>Ambil Foto (Kamera)</span>
+            <input
+              id="quick-photo-camera-input"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onchange="handleQuickPhotoFileChange(event)"
+              class="sr-only"
+            />
+          </label>
+
+          <label class="min-h-[52px] px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
+            <i data-lucide="folder-open" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+            <span>Pilih dari Galeri / File</span>
+            <input
+              id="quick-photo-gallery-input"
+              type="file"
+              accept="image/*"
+              onchange="handleQuickPhotoFileChange(event)"
+              class="sr-only"
+            />
+          </label>
+        </div>
+
+        <button
+          type="button"
+          onclick="closeQuickPhotoSourceModal()"
+          class="w-full min-h-[44px] px-4 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+        >
+          Batal
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Quick Photo Upload Progress Overlay -->
   <div id="quick-photo-loading-overlay" class="hidden fixed inset-0 z-[65] bg-slate-900/55 backdrop-blur-xs flex items-center justify-center p-4" role="status" aria-live="polite">
@@ -685,30 +737,48 @@
           <!-- Upload / Foto Fisik KK -->
           <div class="pt-1">
             <div class="flex items-center justify-between mb-1.5">
-              <label for="input-foto-kk" class="block text-sm font-semibold text-slate-800">
+              <label for="input-foto-kk-gallery" class="block text-sm font-semibold text-slate-800">
                 Foto Fisik KK <span id="kk-photo-status-badge" class="text-xs font-normal text-slate-500">(Opsional)</span>
               </label>
               <span class="text-[11px] font-mono text-slate-400">Maks. 1000px · JPEG</span>
             </div>
 
             <div class="space-y-2.5">
-              <!-- Input File / Kamera -->
-              <label
-                id="kk-photo-upload-btn"
-                for="input-foto-kk"
-                class="relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors"
-              >
-                <i data-lucide="image-plus" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
-                <span id="kk-photo-upload-label">Ambil Foto / Unggah Foto Fisik KK</span>
-                <input
-                  id="input-foto-kk"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onchange="handleKKPhotoFileChange(event)"
-                  class="sr-only"
-                />
-              </label>
+              <!-- Dua Opsi Sumber Foto KK: Kamera & Galeri/File -->
+              <div id="kk-photo-upload-group" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label
+                  id="kk-photo-camera-btn"
+                  for="input-foto-kk-camera"
+                  class="relative w-full min-h-[48px] px-3 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer transition-colors text-center"
+                >
+                  <i data-lucide="camera" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+                  <span id="kk-photo-camera-label">Ambil Foto (Kamera)</span>
+                  <input
+                    id="input-foto-kk-camera"
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onchange="handleKKPhotoFileChange(event)"
+                    class="sr-only"
+                  />
+                </label>
+
+                <label
+                  id="kk-photo-gallery-btn"
+                  for="input-foto-kk-gallery"
+                  class="relative w-full min-h-[48px] px-3 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer transition-colors text-center"
+                >
+                  <i data-lucide="folder-open" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+                  <span id="kk-photo-gallery-label">Pilih dari Galeri / File</span>
+                  <input
+                    id="input-foto-kk-gallery"
+                    type="file"
+                    accept="image/*"
+                    onchange="handleKKPhotoFileChange(event)"
+                    class="sr-only"
+                  />
+                </label>
+              </div>
 
               <!-- Status Arsip / Wajib Upload Foto KK dari check_quota -->
               <div id="kk-photo-requirement-box" class="hidden rounded-xl border p-3 flex items-start gap-2.5"></div>
@@ -731,10 +801,10 @@
                 <div class="flex items-center gap-1 shrink-0">
                   <button
                     type="button"
-                    onclick="document.getElementById('input-foto-kk').click()"
+                    onclick="document.getElementById('input-foto-kk-gallery').click()"
                     class="px-2.5 min-h-[34px] text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-lg transition-colors"
                   >
-                    Ganti
+                    Ganti File
                   </button>
                   <button
                     type="button"
@@ -1074,22 +1144,30 @@
         </label>
 
         <!-- Scanner Buttons -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div class="space-y-2.5">
           <button
             id="btn-capture-ocr"
             type="button"
             onclick="captureAndScan()"
-            class="min-h-[48px] px-4 bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+            class="w-full min-h-[48px] px-4 bg-[#C8102E] hover:bg-[#A00C24] disabled:bg-slate-300 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
           >
             <i data-lucide="scan-line" class="w-4 h-4"></i>
-            <span>Ambil Foto &amp; Scan</span>
+            <span>Jepret Kamera Langsung &amp; Scan</span>
           </button>
 
-          <label class="min-h-[48px] px-4 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
-            <i data-lucide="upload" class="w-4 h-4"></i>
-            <span>Unggah Foto KK</span>
-            <input id="ocr-file-input" type="file" accept="image/*" class="hidden" onchange="handleFileScan(event)" />
-          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <label class="min-h-[48px] px-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
+              <i data-lucide="camera" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+              <span>Ambil Foto (Kamera)</span>
+              <input id="ocr-camera-input" type="file" accept="image/*" capture="environment" class="sr-only" onchange="handleFileScan(event)" />
+            </label>
+
+            <label class="min-h-[48px] px-3.5 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors">
+              <i data-lucide="folder-open" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+              <span>Pilih dari Galeri / File</span>
+              <input id="ocr-file-input" type="file" accept="image/*" class="sr-only" onchange="handleFileScan(event)" />
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -1163,26 +1241,42 @@
         <!-- Input File / Kamera -->
         <div>
           <div class="flex items-center justify-between mb-1.5">
-            <label for="modal-input-foto-kk" class="block text-xs font-semibold text-slate-800">
-              Pilih atau Ambil Foto KK
-            </label>
+            <span class="block text-xs font-semibold text-slate-800">
+              Pilih Sumber Foto KK
+            </span>
             <span class="text-[11px] font-mono text-slate-400">Maks. 1000px · JPEG</span>
           </div>
-          <label
-            for="modal-input-foto-kk"
-            class="w-full min-h-[48px] px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors"
-          >
-            <i data-lucide="camera" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
-            <span id="modal-photo-upload-label">Ambil Foto / Pilih dari Galeri</span>
-            <input
-              id="modal-input-foto-kk"
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onchange="handleModalPhotoFileChange(event)"
-              class="hidden"
-            />
-          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label
+              for="modal-input-foto-kk-camera"
+              class="w-full min-h-[48px] px-3 py-2.5 bg-[#C8102E] hover:bg-[#A00C24] rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-white cursor-pointer transition-colors"
+            >
+              <i data-lucide="camera" class="w-4 h-4 shrink-0"></i>
+              <span>Ambil Foto (Kamera)</span>
+              <input
+                id="modal-input-foto-kk-camera"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onchange="handleModalPhotoFileChange(event)"
+                class="sr-only"
+              />
+            </label>
+            <label
+              for="modal-input-foto-kk-gallery"
+              class="w-full min-h-[48px] px-3 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer transition-colors"
+            >
+              <i data-lucide="folder-open" class="w-4 h-4 text-[#C8102E] shrink-0"></i>
+              <span id="modal-photo-upload-label">Pilih dari Galeri / File</span>
+              <input
+                id="modal-input-foto-kk-gallery"
+                type="file"
+                accept="image/*"
+                onchange="handleModalPhotoFileChange(event)"
+                class="sr-only"
+              />
+            </label>
+          </div>
         </div>
 
         <!-- Preview Thumbnail -->
@@ -2715,7 +2809,7 @@
       if (!appState.quotaState.fotoUrl && !appState.kkPhoto?.base64) {
         showToast("Foto KK wajib diunggah untuk pendaftar baru", "error");
         updateKKPhotoRequirementUI();
-        document.getElementById("kk-photo-upload-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document.getElementById("kk-photo-upload-group")?.scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
 
@@ -3946,36 +4040,42 @@
     }
 
     function updateKKPhotoRequirementUI() {
-      const inputFoto = document.getElementById("input-foto-kk");
+      const inputGallery = document.getElementById("input-foto-kk-gallery");
       const badge = document.getElementById("kk-photo-status-badge");
       const reqBox = document.getElementById("kk-photo-requirement-box");
-      const uploadBtn = document.getElementById("kk-photo-upload-btn");
-      if (!inputFoto || !badge || !reqBox || !uploadBtn) return;
+      const cameraBtn = document.getElementById("kk-photo-camera-btn");
+      const galleryBtn = document.getElementById("kk-photo-gallery-btn");
+      if (!inputGallery || !badge || !reqBox || !cameraBtn || !galleryBtn) return;
+
+      const defaultBtnClass =
+        "relative w-full min-h-[48px] px-3 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer transition-colors text-center";
+      const requiredBtnClass =
+        "relative w-full min-h-[48px] px-3 py-2.5 bg-red-50/50 hover:bg-red-50 border border-dashed border-red-300 hover:border-[#C8102E] rounded-xl flex items-center justify-center gap-2 text-xs font-semibold text-[#C8102E] cursor-pointer transition-colors text-center";
 
       const isChecked = Boolean(appState.quotaState.checked);
       const archivedUrl = appState.quotaState.fotoUrl || "";
       const hasLocalPhoto = Boolean(appState.kkPhoto && appState.kkPhoto.base64);
 
       if (!isChecked) {
-        inputFoto.removeAttribute("required");
-        inputFoto.required = false;
+        inputGallery.removeAttribute("required");
+        inputGallery.required = false;
         badge.className = "text-xs font-normal text-slate-500";
         badge.textContent = "(Opsional)";
         reqBox.classList.add("hidden");
         reqBox.innerHTML = "";
-        uploadBtn.className =
-          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors";
+        cameraBtn.className = defaultBtnClass;
+        galleryBtn.className = defaultBtnClass;
         return;
       }
 
       if (archivedUrl) {
         // Warga Lama: foto_url sudah ada di arsip -> hilangkan required & tampilkan info hijau
-        inputFoto.removeAttribute("required");
-        inputFoto.required = false;
+        inputGallery.removeAttribute("required");
+        inputGallery.required = false;
         badge.className = "text-xs font-semibold text-emerald-700";
         badge.textContent = "(Opsional · Tersimpan di Arsip)";
-        uploadBtn.className =
-          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors";
+        cameraBtn.className = defaultBtnClass;
+        galleryBtn.className = defaultBtnClass;
 
         reqBox.className = "rounded-xl border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-2.5";
         reqBox.innerHTML = `
@@ -4004,25 +4104,25 @@
       badge.textContent = "(Wajib)";
 
       if (hasLocalPhoto) {
-        // Sudah ada foto terlampir (dari upload atau tangkapan kamera OCR)
-        inputFoto.removeAttribute("required");
-        inputFoto.required = false;
-        uploadBtn.className =
-          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-[#C8102E]/60 rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer transition-colors";
+        // Sudah ada foto terlampir (dari kamera, galeri/file, atau tangkapan Scan KK OCR)
+        inputGallery.removeAttribute("required");
+        inputGallery.required = false;
+        cameraBtn.className = defaultBtnClass;
+        galleryBtn.className = defaultBtnClass;
         reqBox.classList.add("hidden");
         reqBox.innerHTML = "";
       } else {
-        inputFoto.setAttribute("required", "required");
-        inputFoto.required = true;
-        uploadBtn.className =
-          "relative w-full min-h-[48px] px-3.5 py-2.5 bg-red-50/50 hover:bg-red-50 border border-dashed border-red-300 hover:border-[#C8102E] rounded-xl flex items-center justify-center gap-2 text-xs sm:text-sm font-semibold text-[#C8102E] cursor-pointer transition-colors";
+        inputGallery.setAttribute("required", "required");
+        inputGallery.required = true;
+        cameraBtn.className = requiredBtnClass;
+        galleryBtn.className = requiredBtnClass;
 
         reqBox.className = "rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-start gap-2.5";
         reqBox.innerHTML = `
           <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-amber-900">Foto KK wajib diunggah untuk pendaftar baru</p>
-            <p class="text-[11px] text-amber-800 mt-0.5">Unggah foto fisik KK di atas atau gunakan fitur Scan KK OCR.</p>
+            <p class="text-[11px] text-amber-800 mt-0.5">Gunakan tombol Ambil Foto (Kamera), Pilih dari Galeri / File, atau Scan KK OCR.</p>
           </div>
         `;
         lucide.createIcons();
@@ -4034,7 +4134,8 @@
       const img = document.getElementById("kk-photo-preview-img");
       const sourceLabel = document.getElementById("kk-photo-source-label");
       const metaLabel = document.getElementById("kk-photo-meta-label");
-      const uploadLabel = document.getElementById("kk-photo-upload-label");
+      const cameraLabel = document.getElementById("kk-photo-camera-label");
+      const galleryLabel = document.getElementById("kk-photo-gallery-label");
       if (!wrap || !img) return;
 
       if (appState.kkPhoto && appState.kkPhoto.base64) {
@@ -4043,11 +4144,13 @@
         if (metaLabel) {
           metaLabel.textContent = `${appState.kkPhoto.width}×${appState.kkPhoto.height} px · ~${appState.kkPhoto.sizeKB} KB (JPEG 75%)`;
         }
-        if (uploadLabel) uploadLabel.textContent = "Ganti Foto Fisik KK";
+        if (cameraLabel) cameraLabel.textContent = "Foto Ulang (Kamera)";
+        if (galleryLabel) galleryLabel.textContent = "Ganti dari Galeri / File";
         wrap.classList.remove("hidden");
       } else {
         img.src = "";
-        if (uploadLabel) uploadLabel.textContent = "Ambil Foto / Unggah Foto Fisik KK";
+        if (cameraLabel) cameraLabel.textContent = "Ambil Foto (Kamera)";
+        if (galleryLabel) galleryLabel.textContent = "Pilih dari Galeri / File";
         wrap.classList.add("hidden");
       }
       updateKKPhotoRequirementUI();
@@ -4055,8 +4158,10 @@
 
     function clearKKPhoto() {
       appState.kkPhoto = null;
-      const input = document.getElementById("input-foto-kk");
-      if (input) input.value = "";
+      const camInput = document.getElementById("input-foto-kk-camera");
+      const galInput = document.getElementById("input-foto-kk-gallery");
+      if (camInput) camInput.value = "";
+      if (galInput) galInput.value = "";
       renderKKPhotoPreview();
     }
 
@@ -4149,8 +4254,10 @@
 
     function clearModalPhotoSelection() {
       appState.pendingPhotoUpload = null;
-      const input = document.getElementById("modal-input-foto-kk");
-      if (input) input.value = "";
+      const camInput = document.getElementById("modal-input-foto-kk-camera");
+      const galInput = document.getElementById("modal-input-foto-kk-gallery");
+      if (camInput) camInput.value = "";
+      if (galInput) galInput.value = "";
       const wrap = document.getElementById("modal-photo-preview-wrap");
       const img = document.getElementById("modal-photo-preview-img");
       const label = document.getElementById("modal-photo-upload-label");
@@ -4158,7 +4265,7 @@
       const btnText = document.getElementById("btn-confirm-add-photo-text");
       if (wrap) wrap.classList.add("hidden");
       if (img) img.src = "";
-      if (label) label.textContent = "Ambil Foto / Pilih dari Galeri";
+      if (label) label.textContent = "Pilih dari Galeri / File";
       if (btn) btn.disabled = true;
       if (btnText) btnText.textContent = "Unggah & Simpan Foto";
     }
@@ -4193,7 +4300,7 @@
             document.getElementById("modal-photo-source-label").textContent = appState.pendingPhotoUpload.source;
             document.getElementById("modal-photo-meta-label").textContent =
               `${compressed.width}×${compressed.height} px · ~${compressed.sizeKB} KB (JPEG 75%)`;
-            document.getElementById("modal-photo-upload-label").textContent = "Ganti Foto Fisik KK";
+            document.getElementById("modal-photo-upload-label").textContent = "Ganti dari Galeri / File";
             document.getElementById("modal-photo-preview-wrap").classList.remove("hidden");
             document.getElementById("btn-confirm-add-photo").disabled = false;
           } catch (err) {
@@ -4229,10 +4336,29 @@
         return;
       }
       appState.quickPhotoTarget = { noKK: cleanKK, nama: nama || cleanKK };
-      const input = document.getElementById("quick-photo-file-input");
-      if (!input) return;
-      input.value = "";
-      input.click();
+
+      const camInput = document.getElementById("quick-photo-camera-input");
+      const galInput = document.getElementById("quick-photo-gallery-input");
+      if (camInput) camInput.value = "";
+      if (galInput) galInput.value = "";
+
+      const namaEl = document.getElementById("quick-photo-target-nama");
+      const kkEl = document.getElementById("quick-photo-target-kk");
+      if (namaEl) namaEl.textContent = nama || cleanKK;
+      if (kkEl) kkEl.textContent = `No. KK: ${cleanKK}`;
+
+      document.getElementById("modal-quick-photo-source").classList.remove("hidden");
+      lucide.createIcons();
+    }
+
+    function closeQuickPhotoSourceModal(clearTarget = true) {
+      const modal = document.getElementById("modal-quick-photo-source");
+      if (modal) modal.classList.add("hidden");
+      const camInput = document.getElementById("quick-photo-camera-input");
+      const galInput = document.getElementById("quick-photo-gallery-input");
+      if (camInput) camInput.value = "";
+      if (galInput) galInput.value = "";
+      if (clearTarget) appState.quickPhotoTarget = null;
     }
 
     function setQuickPhotoLoading(visible, title = "Mengunggah Foto KK...", desc = "Mengompresi & menyimpan ke arsip server") {
@@ -4253,7 +4379,7 @@
     function handleQuickPhotoFileChange(event) {
       const file = event.target.files && event.target.files[0];
       const target = appState.quickPhotoTarget;
-      event.target.value = "";
+      closeQuickPhotoSourceModal(false);
       if (!file || !target || !appState.session) return;
 
       if (!file.type || !file.type.startsWith("image/")) {
@@ -4507,7 +4633,10 @@
 
     function closeScannerModal() {
       stopCameraStream();
-      document.getElementById("ocr-file-input").value = "";
+      const ocrCam = document.getElementById("ocr-camera-input");
+      const ocrFile = document.getElementById("ocr-file-input");
+      if (ocrCam) ocrCam.value = "";
+      if (ocrFile) ocrFile.value = "";
       document.getElementById("modal-scanner").classList.add("hidden");
     }
 
@@ -4519,12 +4648,19 @@
         return;
       }
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Kompresi wajib via HTML5 canvas maks. 1000px JPEG 0.75
+      const compressed = compressImageSourceToJpeg(video, 1000, 0.75);
+      canvas.width = compressed.width;
+      canvas.height = compressed.height;
+      canvas.getContext("2d").drawImage(video, 0, 0, compressed.width, compressed.height);
 
-      // Simpan otomatis hasil tangkapan kamera sebagai foto KK (terkompresi maks. 1000px JPEG 0.75)
-      attachOcrCanvasAsKKPhoto(canvas, "Hasil Kamera Scan KK OCR");
+      if (appState.autoSaveOcrPhoto) {
+        appState.kkPhoto = {
+          ...compressed,
+          source: "Hasil Kamera Scan KK OCR",
+        };
+        renderKKPhotoPreview();
+      }
 
       video.classList.add("hidden");
       document.getElementById("ocr-viewfinder").classList.add("hidden");
@@ -4535,7 +4671,13 @@
 
     function handleFileScan(event) {
       const file = event.target.files && event.target.files[0];
+      event.target.value = "";
       if (!file) return;
+
+      if (!file.type || !file.type.startsWith("image/")) {
+        showToast("File harus berupa gambar (JPG/PNG/WebP)", "error");
+        return;
+      }
 
       stopCameraStream();
       const video = document.getElementById("ocr-video");
@@ -4547,27 +4689,38 @@
       reader.onload = (e) => {
         const img = new Image();
         img.onload = async () => {
-          const maxDim = 1600;
-          let w = img.width;
-          let h = img.height;
-          if (w > maxDim || h > maxDim) {
-            const ratio = Math.min(maxDim / w, maxDim / h);
-            w = Math.round(w * ratio);
-            h = Math.round(h * ratio);
+          try {
+            // Kompresi wajib via HTML5 canvas maks. 1000px JPEG 0.75 untuk Scan OCR & Lampiran Foto KK
+            const compressed = compressImageSourceToJpeg(img, 1000, 0.75);
+
+            const compressedImg = new Image();
+            compressedImg.onload = async () => {
+              canvas.width = compressed.width;
+              canvas.height = compressed.height;
+              canvas.getContext("2d").drawImage(compressedImg, 0, 0, compressed.width, compressed.height);
+
+              if (appState.autoSaveOcrPhoto) {
+                appState.kkPhoto = {
+                  ...compressed,
+                  source: file.name ? `OCR · ${file.name}` : "Hasil Scan KK OCR",
+                };
+                renderKKPhotoPreview();
+              }
+
+              video.classList.add("hidden");
+              fallback.classList.add("hidden");
+              viewfinder.classList.add("hidden");
+              canvas.classList.remove("hidden");
+
+              await runOcrOnCanvas(canvas);
+            };
+            compressedImg.src = compressed.base64;
+          } catch (err) {
+            showToast(`Gagal memproses gambar OCR: ${err.message}`, "error");
           }
-          canvas.width = w;
-          canvas.height = h;
-          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-
-          // Simpan otomatis foto unggahan OCR sebagai foto KK (terkompresi maks. 1000px JPEG 0.75)
-          attachOcrCanvasAsKKPhoto(canvas, file.name ? `OCR · ${file.name}` : "Hasil Unggah Scan KK OCR");
-
-          video.classList.add("hidden");
-          fallback.classList.add("hidden");
-          viewfinder.classList.add("hidden");
-          canvas.classList.remove("hidden");
-
-          await runOcrOnCanvas(canvas);
+        };
+        img.onerror = () => {
+          showToast("Gambar tidak dapat dibaca. Silakan pilih foto lain.", "error");
         };
         img.src = e.target.result;
       };
